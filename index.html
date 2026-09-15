@@ -472,7 +472,7 @@ function mark(status){
 function buildWorkbook(){
   const f = collect();
   const aoa = [];
-  const push = (...r)=>aoa.push(r);
+  const push = (row)=>aoa.push(row);
 
   push(["Test Team ECN Test Report"]);
   push(["Test Date:", f.testDate, "", "", "EST.cmplt Date:", f.estDate]);
@@ -500,7 +500,7 @@ function buildWorkbook(){
     if(r){
       row.push(r[0], r[1], "", mark(state.basic[r[0]])==='V'?'v':'', mark(state.basic[r[0]])==='X'?'x':'');
     }
-    push(...[row]);
+    push(row);
   }
   push([]);
   push(["Suspend Test","","","","","","","","PASS (v)","FAIL (x)"]);
