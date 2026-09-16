@@ -700,6 +700,27 @@ function downloadBlob(blob, name){
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
 }
 
+// On iOS Safari, a plain <a download> click on a blob: URL is unreliable —
+// it very often just opens an inline preview instead of actually writing a
+// file to disk, which is why downloaded/saved files were not showing up
+// anywhere in the Files app. navigator.share() opens the real native Share
+// Sheet, where "储存到「檔案」" is an explicit, visible action the user
+// takes and can see confirmed — so it is used whenever available, with the
+// old <a download> kept only as a fallback for browsers without Web Share.
+async function saveFile(blob, name, mimeType){
+  try{
+    const file = new File([blob], name, {type: mimeType || blob.type});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:name});
+      return 'shared';
+    }
+  }catch(err){
+    if(err && err.name === 'AbortError') return 'cancelled';
+  }
+  downloadBlob(blob, name);
+  return 'downloaded';
+}
+
 /* ---------------- Reset / exit ---------------- */
 document.getElementById('btnReset').addEventListener('click', ()=>{
   const ok = window.confirm('確定要清空目前所有已填寫的內容嗎？此動作無法復原。');
@@ -714,7 +735,14 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
   state.app = {};
   customItems = [];
   refreshAllToggleUI();
-  showToast('已清空，可以開始新的報告');
+  showToast('已清空');
+  // Browsers only allow a page to close itself if the page was opened by
+  // script (e.g. window.open from another page). A normal tab, a typed
+  // URL, or a home-screen bookmark — which is how this app is normally
+  // used — cannot be closed this way; this is a browser security rule,
+  // not something this app can override. The attempt is harmless either
+  // way, so it is made regardless.
+  setTimeout(()=>{ window.close(); }, 300);
 });
 
 /* ---------------- Save / Open draft (mid-progress persistence) ---------------- */
@@ -759,13 +787,15 @@ function applyDraft(obj){
   refreshAllToggleUI();
 }
 
-document.getElementById('btnSaveDraft').addEventListener('click', ()=>{
+document.getElementById('btnSaveDraft').addEventListener('click', async ()=>{
   try{
     const meta = collect();
     const name = fileName(meta, 'json').replace('.json','_draft.json');
     const blob = new Blob([serializeDraft()], {type:'application/json'});
-    downloadBlob(blob, name);
-    showToast('已存檔到「檔案」App／下載項目：'+name);
+    const result = await saveFile(blob, name, 'application/json');
+    if(result === 'shared') showToast('請在分享畫面選「儲存到「檔案」」，才會真的存進手機：'+name, 4500);
+    else if(result === 'downloaded') showToast('已存檔：'+name);
+    // 'cancelled': user backed out of the share sheet, nothing to say
   }catch(err){
     console.error(err);
     showToast('存檔失敗：'+(err && err.message ? err.message : '未知錯誤'));
@@ -808,20 +838,17 @@ function preprocessImageForOcr(file){
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
+        // Grayscale only — no hard black/white cutoff. A single global
+        // threshold looks fine on an evenly-lit test image but falls apart
+        // on a real phone photo with any shadow or glare gradient across
+        // the frame, wiping out real text or turning noise into "text".
+        // Tesseract's own binarization is per-region/adaptive and handles
+        // that far better than a blanket threshold can.
         const imgData = ctx.getImageData(0, 0, w, h);
         const d = imgData.data;
-        const gray = new Float32Array(w*h);
-        let sum = 0;
-        for(let i=0, p=0; i<d.length; i+=4, p++){
+        for(let i=0; i<d.length; i+=4){
           const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-          gray[p] = g;
-          sum += g;
-        }
-        const mean = sum / (w*h);
-        const threshold = mean * 0.86;
-        for(let i=0, p=0; i<d.length; i+=4, p++){
-          const v = gray[p] > threshold ? 255 : 0;
-          d[i] = d[i+1] = d[i+2] = v;
+          d[i] = d[i+1] = d[i+2] = g;
         }
         ctx.putImageData(imgData, 0, 0);
         canvas.toBlob(blob=>{
@@ -894,8 +921,7 @@ function b64ToBuf(b64){
   return bytes.buffer;
 }
 
-const PF_FONT = { name:'Calibri', size:11, bold:true };
-const PF_ALIGN = { horizontal:'center', vertical:'middle' };
+const UNIFORM_FONT = { name:'Calibri', size:10, bold:false };
 
 async function generateBlob(){
   const f = collect();
@@ -905,19 +931,23 @@ async function generateBlob(){
 
   const set = (addr, val)=>{
     if(val !== undefined && val !== null && String(val) !== ''){
-      ws.getCell(addr).value = val;
+      const cell = ws.getCell(addr);
+      cell.value = val;
+      cell.font = UNIFORM_FONT;
     }
   };
   const appendToLabel = (addr, val)=>{
     if(!val) return;
-    const cur = ws.getCell(addr).value;
-    ws.getCell(addr).value = (cur == null ? '' : String(cur)) + val;
+    const cell = ws.getCell(addr);
+    const cur = cell.value;
+    cell.value = (cur == null ? '' : String(cur)) + val;
+    cell.font = UNIFORM_FONT;
   };
   const writeMark = (addr, text)=>{
     const cell = ws.getCell(addr);
     cell.value = text;
-    cell.font = PF_FONT;
-    cell.alignment = Object.assign({}, cell.alignment, PF_ALIGN);
+    cell.font = UNIFORM_FONT;
+    cell.alignment = Object.assign({}, cell.alignment, {horizontal:'center', vertical:'middle'});
   };
   const pf = (passAddr, failAddr, status)=>{
     if(status === 'pass') writeMark(passAddr, 'v');
@@ -933,6 +963,7 @@ async function generateBlob(){
       if(val !== ''){
         const cell = ws.getCell(addrs[i]);
         cell.value = val;
+        cell.font = UNIFORM_FONT;
         cell.alignment = Object.assign({}, cell.alignment, {wrapText:true, vertical:'top'});
       }
     }
@@ -964,8 +995,31 @@ async function generateBlob(){
     pf('I'+row, 'J'+row, state.basic[i]);
   }
 
+  // Items 51-54: the template already reserves these rows (F46/47/48 are
+  // pre-printed "51/52/53"; row 49's right side is a 4th blank slot) right
+  // next to items 24-27, inside the existing grid — no row insertion
+  // needed, and nothing below has to move.
+  const RESERVED_SLOTS = [
+    {numAddr:'F46', nameAddr:'G46', passAddr:'I46', failAddr:'J46', prefilled:true},
+    {numAddr:'F47', nameAddr:'G47', passAddr:'I47', failAddr:'J47', prefilled:true},
+    {numAddr:'F48', nameAddr:'G48', passAddr:'I48', failAddr:'J48', prefilled:true},
+    {numAddr:'F49', nameAddr:'G49', passAddr:'I49', failAddr:'J49', prefilled:false},
+  ];
   const items = (customItems||[]).filter(it=>it.name && it.name.trim()!=='');
-  const N = items.length;
+  const reservedUsed = Math.min(items.length, RESERVED_SLOTS.length);
+  for(let i=0;i<reservedUsed;i++){
+    const slot = RESERVED_SLOTS[i];
+    const it = items[i];
+    if(!slot.prefilled) set(slot.numAddr, 51+i);
+    set(slot.nameAddr, it.name.trim());
+    pf(slot.passAddr, slot.failAddr, it.status);
+  }
+
+  // A 5th+ custom item has no reserved slot left, so (and only then) new
+  // rows are inserted after row 49, numbered starting at 55, shifting
+  // Suspend Test / Application Software Test / sign-off down to make room.
+  const overflow = items.slice(RESERVED_SLOTS.length);
+  const N = overflow.length;
   if(N > 0){
     const FIXED_START = 50;
     const mergeRe = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
@@ -986,15 +1040,12 @@ async function generateBlob(){
       ws.mergeCells(`${sm.c1}${sm.r1+N}:${sm.c2}${sm.r2+N}`);
     });
 
-    items.forEach((it, idx)=>{
+    overflow.forEach((it, idx)=>{
       const row = 50+idx;
-      const num = 51+idx;
+      const num = 51 + RESERVED_SLOTS.length + idx;
       ws.mergeCells(`B${row}:C${row}`);
-      ['A','B','D','E'].forEach(col=>{
-        ws.getCell(`${col}${row}`).style = JSON.parse(JSON.stringify(ws.getCell(`${col}49`).style));
-      });
-      ws.getCell(`A${row}`).value = num;
-      ws.getCell(`B${row}`).value = it.name.trim();
+      set(`A${row}`, num);
+      set(`B${row}`, it.name.trim());
       pf(`D${row}`, `E${row}`, it.status);
     });
   }
@@ -1013,6 +1064,7 @@ async function generateBlob(){
   if(f.markVer || f.markScore){
     const cell = ws.getCell(`F${R(56)}`);
     cell.value = `3DMark (Ver: ${f.markVer || '        '} /Score: ${f.markScore || '        '})\nP.S The memory size needs to be more than 8GB`;
+    cell.font = UNIFORM_FONT;
     cell.alignment = Object.assign({}, cell.alignment, {wrapText:true});
   }
 
@@ -1111,9 +1163,10 @@ document.getElementById('btnConfirmDownload').addEventListener('click', async ()
     showToast('產生報告中...', 6000);
     const {blob, meta} = await generateBlob();
     const name = fileName(meta, 'xlsx');
-    downloadBlob(blob, name);
+    const result = await saveFile(blob, name);
     closePreview();
-    showToast('已產生 Excel 報告：'+name);
+    if(result === 'shared') showToast('請在分享畫面選「儲存到「檔案」」，才會真的存進手機：'+name, 4500);
+    else if(result === 'downloaded') showToast('已產生 Excel 報告：'+name);
   }catch(err){
     console.error(err);
     showToast('產生 Excel 失敗：'+(err && err.message ? err.message : '未知錯誤'), 4000);
@@ -1129,12 +1182,13 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
     showToast('產生報告中...', 6000);
     const {blob, meta} = await generateBlob();
     const name = fileName(meta, 'xlsx');
-    downloadBlob(blob, name);
+    const result = await saveFile(blob, name);
     const shareText = `${meta.projectName || 'BIOS'} ECN Test Report`;
-    const mailBody = `報告已下載為：${name}\n請在這封郵件手動附加剛剛下載的檔案後再寄出（iOS 郵件無法由網頁自動附加附件，這是系統限制）。`;
+    const mailBody = `報告檔名：${name}\n請在這封郵件手動附加該檔案後再寄出（iOS 郵件無法由網頁自動附加附件，這是系統限制）。`;
     const mailto = `mailto:${encodeURIComponent(meta.mailTo||DEFAULT_MAILTO)}?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(mailBody)}`;
-    showToast('已下載報告，正在開啟郵件並帶入收件人...', 4000);
-    setTimeout(()=>{ window.location.href = mailto; }, 700);
+    if(result === 'shared') showToast('存檔選單裡記得選「儲存到「檔案」」，接著開啟郵件並帶入收件人...', 4500);
+    else showToast('已下載報告，正在開啟郵件並帶入收件人...', 4000);
+    setTimeout(()=>{ window.location.href = mailto; }, 900);
   }catch(err){
     console.error(err);
     showToast('寄出失敗：'+(err && err.message ? err.message : '未知錯誤'), 4000);
