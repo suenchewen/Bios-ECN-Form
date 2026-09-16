@@ -141,7 +141,7 @@ select{-webkit-appearance:none; appearance:none; background-image:url("data:imag
 .item-row{padding:10px 14px;}
 .item-row .item-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
 .item-num{color:var(--sub); font-size:12px; min-width:20px; padding-top:2px;}
-.item-name{font-size:14.5px; line-height:1.35; flex:1;}
+.item-name{font-size:14.5px; line-height:1.35; flex:1; min-width:0; overflow-wrap:break-word; word-break:break-word;}
 .item-note{font-size:12px; color:var(--sub); white-space:pre-line; margin-top:3px;}
 .toggle-group{display:flex; gap:5px; flex:0 0 auto;}
 .toggle-btn{
@@ -231,6 +231,44 @@ details[open] > summary .chev{transform:rotate(90deg);}
 .badge.pass{background:var(--pass-bg); color:var(--pass);}
 .badge.fail{background:var(--fail-bg); color:var(--fail);}
 .badge.pending{background:#EEF0F3; color:var(--sub);}
+
+.preview-overlay{
+  position:fixed; inset:0; z-index:100; background:rgba(21,32,43,0.45);
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.preview-overlay[hidden]{display:none;}
+.preview-sheet{
+  background:var(--bg); width:100%; max-width:640px; height:88vh; max-height:88vh;
+  border-radius:18px 18px 0 0; display:flex; flex-direction:column; overflow:hidden;
+}
+.preview-header{
+  display:flex; align-items:center; justify-content:space-between; padding:14px 16px;
+  border-bottom:1px solid var(--line); background:var(--panel); flex:0 0 auto;
+}
+.preview-title{font-weight:700; font-size:17px;}
+.preview-close{
+  width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:#fff;
+  font-size:14px; display:flex; align-items:center; justify-content:center; padding:0; color:var(--sub);
+}
+.preview-body{flex:1 1 auto; overflow-y:auto; padding:14px;}
+.preview-actions{
+  display:flex; gap:10px; padding:10px 14px calc(10px + var(--safe-bottom));
+  border-top:1px solid var(--line); background:var(--panel); flex:0 0 auto;
+}
+.pv-section{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:14px; overflow:hidden;}
+.pv-section-title{font-weight:700; font-size:13.5px; padding:10px 14px; border-bottom:1px solid var(--line); background:#F7F8FA;}
+.pv-row{display:flex; justify-content:space-between; gap:10px; padding:7px 14px; font-size:13.5px; border-bottom:1px solid var(--line);}
+.pv-row:last-child{border-bottom:none;}
+.pv-row .k{color:var(--sub); flex:0 0 auto;}
+.pv-row .v{text-align:right; flex:1; min-width:0; overflow-wrap:break-word;}
+.pv-item{display:flex; justify-content:space-between; gap:8px; padding:6px 14px; font-size:13px; border-bottom:1px solid var(--line);}
+.pv-item:last-child{border-bottom:none;}
+.pv-item .n{flex:1; min-width:0; overflow-wrap:break-word;}
+.pv-badge{flex:0 0 auto; font-weight:700; font-size:11.5px; padding:2px 8px; border-radius:99px;}
+.pv-badge.pass{background:var(--pass-bg); color:var(--pass);}
+.pv-badge.fail{background:var(--fail-bg); color:var(--fail);}
+.pv-badge.na{background:var(--na-bg); color:var(--na);}
+.pv-badge.pending{background:#EEF0F3; color:var(--sub);}
 </style>
 </head>
 <body>
@@ -244,6 +282,7 @@ details[open] > summary .chev{transform:rotate(90deg);}
     <div class="navbar-actions">
       <button type="button" id="btnSaveDraft" class="nav-icon-btn" title="存檔（暫存進度）">💾</button>
       <button type="button" id="btnOpenDraft" class="nav-icon-btn" title="開啟檔案（讀回進度）">📂</button>
+      <button type="button" id="btnReset" class="nav-icon-btn" title="退出（清空目前表單）">🚪</button>
       <input type="file" id="openDraftInput" accept="application/json,.json" hidden>
     </div>
   </div>
@@ -393,19 +432,33 @@ details[open] > summary .chev{transform:rotate(90deg);}
   <div class="group">
     <div class="group-title">寄送 Email</div>
     <div class="card">
-      <div class="row"><label class="field-label">收件人 Email</label><input type="text" id="mailTo" placeholder="name@company.com"></div>
+      <div class="row"><label class="field-label">收件人 Email</label><input type="text" id="mailTo" placeholder="name@company.com" value="marslin@biostar.com.tw,kaitin@biostar.com.tw,jackysun@biostar.com.tw,john@biostar.com.tw,emily@biostar.com.tw,frank@biostar.com.tw,kevinhuang@biostar.com.tw,howard@biostar.com.tw"></div>
     </div>
-    <div class="hint">按「寄出 Email」會叫出分享選單，選擇「郵件」即可將 Excel 報告作為附件寄出（需 iOS 16 以上 Safari）。若裝置不支援附件分享，會改為直接下載 Excel 檔，請自行於郵件 App 手動附加。</div>
+    <div class="hint">收件人已預設常用名單，可自行刪改。按「寄出 Email」會先下載 Excel 報告，接著開啟郵件 App 並帶入上面的收件人與主旨，請在郵件裡手動附加剛剛下載的檔案（iOS 郵件 App 無法透過網頁自動附加檔案，這是系統限制）。</div>
   </div>
 
 </div>
 
 <div class="action-bar">
-  <button class="btn btn-secondary" id="btnExcel">📊 產生 Excel</button>
-  <button class="btn btn-primary" id="btnEmail">📧 寄出 Email</button>
+  <button class="btn btn-secondary" id="btnExcel">👁 預覽 Excel</button>
+  <button class="btn btn-primary" id="btnEmail">✉️ 寄出 Email</button>
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div id="previewOverlay" class="preview-overlay" hidden>
+  <div class="preview-sheet">
+    <div class="preview-header">
+      <div class="preview-title">報告預覽</div>
+      <button type="button" id="btnClosePreview" class="preview-close" title="關閉">✕</button>
+    </div>
+    <div class="preview-body" id="previewBody"></div>
+    <div class="preview-actions">
+      <button type="button" id="btnBackEdit" class="btn btn-secondary">返回編輯</button>
+      <button type="button" id="btnConfirmDownload" class="btn btn-primary">⬇︎ 確認下載 Excel</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ---------------- Data ---------------- */
@@ -473,6 +526,8 @@ const appList = [
 "Support motherboard driver installation",
 "System properties information review",
 ];
+
+const DEFAULT_MAILTO = "marslin@biostar.com.tw,kaitin@biostar.com.tw,jackysun@biostar.com.tw,john@biostar.com.tw,emily@biostar.com.tw,frank@biostar.com.tw,kevinhuang@biostar.com.tw,howard@biostar.com.tw";
 
 const state = { basic:{}, suspend:{}, app:{} };
 let customItems = []; // [{name:'', status:null|'pass'|'fail'|'na'}]
@@ -621,7 +676,6 @@ function collect(){
   const v = id => document.getElementById(id).value.trim();
   const out = {};
   FIELD_IDS.forEach(id=>{ out[id] = v(id); });
-  // keep old key names used elsewhere in this file
   return out;
 }
 
@@ -645,6 +699,23 @@ function downloadBlob(blob, name){
   a.href = url; a.download = name; document.body.appendChild(a); a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 500);
 }
+
+/* ---------------- Reset / exit ---------------- */
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  const ok = window.confirm('確定要清空目前所有已填寫的內容嗎？此動作無法復原。');
+  if(!ok) return;
+  FIELD_IDS.forEach(id=>{
+    if(id === 'mailTo') return;
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  state.basic = {};
+  state.suspend = {};
+  state.app = {};
+  customItems = [];
+  refreshAllToggleUI();
+  showToast('已清空，可以開始新的報告');
+});
 
 /* ---------------- Save / Open draft (mid-progress persistence) ---------------- */
 function serializeDraft(){
@@ -694,7 +765,7 @@ document.getElementById('btnSaveDraft').addEventListener('click', ()=>{
     const name = fileName(meta, 'json').replace('.json','_draft.json');
     const blob = new Blob([serializeDraft()], {type:'application/json'});
     downloadBlob(blob, name);
-    showToast('已存檔：'+name);
+    showToast('已存檔到「檔案」App／下載項目：'+name);
   }catch(err){
     console.error(err);
     showToast('存檔失敗：'+(err && err.message ? err.message : '未知錯誤'));
@@ -724,10 +795,55 @@ document.getElementById('openDraftInput').addEventListener('change', (e)=>{
 });
 
 /* ---------------- Camera OCR (HDD / Power / Memory / VGA) ---------------- */
+function preprocessImageForOcr(file){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const MAX_W = 1600;
+        const scale = img.width > MAX_W ? MAX_W / img.width : 1;
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const d = imgData.data;
+        const gray = new Float32Array(w*h);
+        let sum = 0;
+        for(let i=0, p=0; i<d.length; i+=4, p++){
+          const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+          gray[p] = g;
+          sum += g;
+        }
+        const mean = sum / (w*h);
+        const threshold = mean * 0.86;
+        for(let i=0, p=0; i<d.length; i+=4, p++){
+          const v = gray[p] > threshold ? 255 : 0;
+          d[i] = d[i+1] = d[i+2] = v;
+        }
+        ctx.putImageData(imgData, 0, 0);
+        canvas.toBlob(blob=>{
+          if(blob) resolve(blob); else reject(new Error('圖片前處理失敗'));
+        }, 'image/png');
+      }catch(err){ reject(err); }
+    };
+    img.onerror = ()=> reject(new Error('圖片讀取失敗'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 let ocrWorkerPromise = null;
 function getOcrWorker(){
   if(!ocrWorkerPromise){
-    ocrWorkerPromise = Tesseract.createWorker('eng');
+    ocrWorkerPromise = Tesseract.createWorker('eng').then(async worker=>{
+      await worker.setParameters({
+        tessedit_pageseg_mode: '6',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/:()%+- ',
+      });
+      return worker;
+    });
   }
   return ocrWorkerPromise;
 }
@@ -738,11 +854,12 @@ async function runOcrToField(file, fieldId){
   if(camBtn){ camBtn.textContent='⏳'; camBtn.disabled = true; }
   showToast('辨識文字中，第一次使用需要網路下載辨識模型，請稍候...', 9000);
   try{
+    const processed = await preprocessImageForOcr(file).catch(()=>null);
     const worker = await getOcrWorker();
-    const { data } = await worker.recognize(file);
+    const { data } = await worker.recognize(processed || file);
     const text = (data.text || '').replace(/\s+/g,' ').trim();
     if(!text){
-      showToast('沒有辨識到文字，請重新拍照（盡量靠近、對焦清楚）或手動輸入');
+      showToast('沒有辨識到文字，請靠近拍攝、對準文字、避免反光後再試一次');
     } else {
       const input = document.getElementById(fieldId);
       input.value = text;
@@ -821,7 +938,6 @@ async function generateBlob(){
     }
   };
 
-  // ---- Header / board info (all above row 21, unaffected by any row insertion) ----
   set('C2', f.testDate);
   set('H2', f.estDate);
   set('C4', f.projectName);
@@ -839,7 +955,6 @@ async function generateBlob(){
   fillLines(['A13','A14','A15'], f.ecnDesc);
   fillLines(['A17','A18','A19','A20'], f.remark);
 
-  // ---- On Board Basic Function items 1-50 (rows 23-49 / 23-45), unaffected by insertion ----
   for(let i=1;i<=27;i++){
     const row = 22+i;
     pf('D'+row, 'E'+row, state.basic[i]);
@@ -849,11 +964,6 @@ async function generateBlob(){
     pf('I'+row, 'J'+row, state.basic[i]);
   }
 
-  // ---- Custom items (51+): inserted as new rows right after row 49, before Suspend Test ----
-  // NOTE: ExcelJS's duplicateRow() corrupts merged-cell tracking for this kind of insert
-  // (verified by testing), so the shift is done manually: unmerge the affected ranges,
-  // splice in blank rows (which correctly moves cell values/styles), then re-create the
-  // merges at their new row numbers.
   const items = (customItems||[]).filter(it=>it.name && it.name.trim()!=='');
   const N = items.length;
   if(N > 0){
@@ -889,17 +999,16 @@ async function generateBlob(){
     });
   }
 
-  // ---- Everything originally below row 49 shifts down by N ----
   const R = (base)=> base + N;
   pf(`I${R(51)}`, `J${R(51)}`, state.suspend['S1']);
   pf(`I${R(52)}`, `J${R(52)}`, state.suspend['S3']);
   pf(`I${R(53)}`, `J${R(53)}`, state.suspend['S4']);
 
-  pf(`D${R(56)}`, `E${R(56)}`, state.app[1]);   // Reboot
-  pf(`I${R(56)}`, `J${R(56)}`, state.app[2]);   // 3DMark
-  pf(`I${R(58)}`, `J${R(58)}`, state.app[3]);   // Windows setup
-  pf(`I${R(59)}`, `J${R(59)}`, state.app[4]);   // Driver install
-  pf(`I${R(60)}`, `J${R(60)}`, state.app[5]);   // System properties
+  pf(`D${R(56)}`, `E${R(56)}`, state.app[1]);
+  pf(`I${R(56)}`, `J${R(56)}`, state.app[2]);
+  pf(`I${R(58)}`, `J${R(58)}`, state.app[3]);
+  pf(`I${R(59)}`, `J${R(59)}`, state.app[4]);
+  pf(`I${R(60)}`, `J${R(60)}`, state.app[5]);
 
   if(f.markVer || f.markScore){
     const cell = ws.getCell(`F${R(56)}`);
@@ -916,17 +1025,94 @@ async function generateBlob(){
   return { blob, meta: f };
 }
 
-/* ---------------- Actions: generate Excel / send Email ---------------- */
-document.getElementById('btnExcel').addEventListener('click', async ()=>{
+/* ---------------- Preview modal ---------------- */
+function statusBadge(status){
+  if(status==='pass') return '<span class="pv-badge pass">Pass</span>';
+  if(status==='fail') return '<span class="pv-badge fail">Fail</span>';
+  if(status==='na') return '<span class="pv-badge na">N/A</span>';
+  return '<span class="pv-badge pending">未測試</span>';
+}
+
+function buildPreviewHtml(){
+  const f = collect();
+  const namedCustom = customItems.filter(i=>i.name && i.name.trim()!=='');
+  const infoRow = (k,v)=>`<div class="pv-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v||'—')}</div></div>`;
+  const itemRow = (label,status)=>`<div class="pv-item"><div class="n">${escapeHtml(label)}</div>${statusBadge(status)}</div>`;
+
+  let html = '';
+
+  html += `<div class="pv-section"><div class="pv-section-title">基本資料</div>`
+    + infoRow('Test Date', f.testDate) + infoRow('EST.cmplt Date', f.estDate)
+    + infoRow('Project Name', f.projectName)
+    + infoRow('PCB Ver / No', `${f.pcbVer}${f.pcbVer&&f.pcbNo?' / ':''}${f.pcbNo}`)
+    + infoRow('Model Name', f.modelName) + infoRow('MB Driver', f.mbDriver)
+    + infoRow('BIOS datecode', f.biosDatecode) + infoRow('Check Sum', f.checkSum)
+    + `</div>`;
+
+  html += `<div class="pv-section"><div class="pv-section-title">Configuration</div>`
+    + infoRow('CPU', f.cpu) + infoRow('HDD', f.hdd) + infoRow('Power', f.power)
+    + infoRow('MEMORY', f.memory) + infoRow('VGA', f.vga) + infoRow('OS', f.os)
+    + `</div>`;
+
+  html += `<div class="pv-section"><div class="pv-section-title">ECN Focus Test Description</div>`
+    + `<div class="pv-row"><div class="v" style="text-align:left;">${escapeHtml(f.ecnDesc||'—')}</div></div></div>`;
+  html += `<div class="pv-section"><div class="pv-section-title">Remark or Issue</div>`
+    + `<div class="pv-row"><div class="v" style="text-align:left;">${escapeHtml(f.remark||'—')}</div></div></div>`;
+
+  html += `<div class="pv-section"><div class="pv-section-title">On Board Basic Function（1–50）</div>`;
+  basicLeft.concat(basicRight).sort((a,b)=>a[0]-b[0]).forEach(it=>{
+    html += itemRow(`${it[0]}. ${it[1]}`, state.basic[it[0]]);
+  });
+  html += `</div>`;
+
+  if(namedCustom.length){
+    html += `<div class="pv-section"><div class="pv-section-title">自訂項目（51+）</div>`;
+    namedCustom.forEach((it,idx)=>{ html += itemRow(`${51+idx}. ${it.name}`, it.status); });
+    html += `</div>`;
+  }
+
+  html += `<div class="pv-section"><div class="pv-section-title">Suspend Test</div>`;
+  suspendList.forEach(s=>{ html += itemRow(s, state.suspend[s]); });
+  html += `</div>`;
+
+  html += `<div class="pv-section"><div class="pv-section-title">Application Software Test</div>`;
+  appList.forEach((name,idx)=>{ html += itemRow(name, state.app[idx+1]); });
+  if(f.markVer || f.markScore){ html += infoRow('3DMark', `Ver ${f.markVer||'—'} / Score ${f.markScore||'—'}`); }
+  html += `</div>`;
+
+  html += `<div class="pv-section"><div class="pv-section-title">簽核</div>`
+    + infoRow('Approved by', f.approvedBy) + infoRow('Checked by', f.checkedBy) + infoRow('Tested by', f.testedBy)
+    + `</div>`;
+
+  return html;
+}
+
+function openPreview(){
+  document.getElementById('previewBody').innerHTML = buildPreviewHtml();
+  document.getElementById('previewOverlay').hidden = false;
+}
+function closePreview(){
+  document.getElementById('previewOverlay').hidden = true;
+}
+document.getElementById('btnClosePreview').addEventListener('click', closePreview);
+document.getElementById('btnBackEdit').addEventListener('click', closePreview);
+
+/* ---------------- Actions: preview / confirm download / send email ---------------- */
+document.getElementById('btnExcel').addEventListener('click', ()=>{
+  const metaPre = collect();
+  const missing = validate(metaPre);
+  if(missing.length){ showToast('請先填寫：'+missing.join('、')); return; }
+  openPreview();
+});
+
+document.getElementById('btnConfirmDownload').addEventListener('click', async ()=>{
   try{
     if(typeof ExcelJS === 'undefined'){ showToast('Excel 程式庫尚未載入完成，請稍候再試一次'); return; }
-    const metaPre = collect();
-    const missing = validate(metaPre);
-    if(missing.length){ showToast('請先填寫：'+missing.join('、')); return; }
     showToast('產生報告中...', 6000);
     const {blob, meta} = await generateBlob();
     const name = fileName(meta, 'xlsx');
     downloadBlob(blob, name);
+    closePreview();
     showToast('已產生 Excel 報告：'+name);
   }catch(err){
     console.error(err);
@@ -943,23 +1129,12 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
     showToast('產生報告中...', 6000);
     const {blob, meta} = await generateBlob();
     const name = fileName(meta, 'xlsx');
-    const file = new File([blob], name, {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    downloadBlob(blob, name);
     const shareText = `${meta.projectName || 'BIOS'} ECN Test Report`;
-
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      try{
-        await navigator.share({files:[file], title:shareText, text:shareText});
-        showToast('已開啟分享選單，請選擇「郵件」寄出');
-      }catch(err){
-        if(err && err.name === 'AbortError'){ /* user cancelled */ }
-        else showToast('分享失敗，已改為下載 Excel 檔');
-      }
-    } else {
-      downloadBlob(blob, name);
-      const mailto = `mailto:${encodeURIComponent(meta.mailTo||'')}?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent('報告已下載，請手動附加 Excel 檔案後寄出：'+name)}`;
-      showToast('此瀏覽器不支援附件分享，已下載檔案，正在開啟郵件...');
-      setTimeout(()=>{ window.location.href = mailto; }, 900);
-    }
+    const mailBody = `報告已下載為：${name}\n請在這封郵件手動附加剛剛下載的檔案後再寄出（iOS 郵件無法由網頁自動附加附件，這是系統限制）。`;
+    const mailto = `mailto:${encodeURIComponent(meta.mailTo||DEFAULT_MAILTO)}?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(mailBody)}`;
+    showToast('已下載報告，正在開啟郵件並帶入收件人...', 4000);
+    setTimeout(()=>{ window.location.href = mailto; }, 700);
   }catch(err){
     console.error(err);
     showToast('寄出失敗：'+(err && err.message ? err.message : '未知錯誤'), 4000);
