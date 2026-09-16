@@ -282,7 +282,7 @@ details[open] > summary .chev{transform:rotate(90deg);}
     <div class="navbar-actions">
       <button type="button" id="btnSaveDraft" class="nav-icon-btn" title="存檔（暫存進度）">💾</button>
       <button type="button" id="btnOpenDraft" class="nav-icon-btn" title="開啟檔案（讀回進度）">📂</button>
-      <button type="button" id="btnReset" class="nav-icon-btn" title="退出（清空目前表單）">🚪</button>
+      <button type="button" id="btnReset" class="nav-icon-btn" title="清空目前表單">🗑️</button>
       <input type="file" id="openDraftInput" accept="application/json,.json" hidden>
     </div>
   </div>
@@ -866,7 +866,13 @@ function getOcrWorker(){
   if(!ocrWorkerPromise){
     ocrWorkerPromise = Tesseract.createWorker('eng').then(async worker=>{
       await worker.setParameters({
-        tessedit_pageseg_mode: '6',
+        // SPARSE_TEXT: "find as much text as possible in no particular
+        // order" — for a small text region inside a much larger plain or
+        // textured background, not a page that's assumed to be full of
+        // text. The previous SINGLE_BLOCK setting told Tesseract to treat
+        // the whole photo as dense text, which likely made it read the
+        // leather/plastic background texture as "text" too.
+        tessedit_pageseg_mode: '11',
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/:()%+- ',
       });
       return worker;
@@ -921,7 +927,7 @@ function b64ToBuf(b64){
   return bytes.buffer;
 }
 
-const UNIFORM_FONT = { name:'Calibri', size:10, bold:false };
+const UNIFORM_FONT = { name:'Calibri', size:9, bold:false };
 
 async function generateBlob(){
   const f = collect();
