@@ -948,7 +948,12 @@ async function runOcrToField(file, fieldId){
     const { data } = await worker.recognize(processed || file);
     const text = (data.text || '').replace(/\s+/g,' ').trim();
     if(!text){
-      showToast('沒有辨識到文字，請靠近拍攝、對準文字、避免反光後再試一次');
+      // Empty result with no thrown error — reset the shared worker so the
+      // *next* attempt gets a fresh one rather than possibly reusing one
+      // that's silently stuck. If a fresh worker fixes it, that confirms
+      // the worker's state (not the photo) was the problem.
+      ocrWorkerPromise = null;
+      showToast('沒有辨識到文字（結果是空的）。已重設辨識引擎，麻煩再試一次同一張照片看看');
     } else {
       const input = document.getElementById(fieldId);
       input.value = text;
@@ -956,7 +961,9 @@ async function runOcrToField(file, fieldId){
     }
   }catch(err){
     console.error(err);
-    showToast('文字辨識失敗（可能需要網路連線），請手動輸入');
+    ocrWorkerPromise = null;
+    const detail = (err && err.message) ? err.message : String(err);
+    showToast('辨識失敗：'+detail+'（已重設辨識引擎，麻煩再試一次）', 6000);
   }finally{
     if(camBtn){ camBtn.textContent = original || '📷'; camBtn.disabled = false; }
   }
