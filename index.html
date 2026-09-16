@@ -838,20 +838,67 @@ function preprocessImageForOcr(file){
         canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, w, h);
-        // Grayscale only — no hard black/white cutoff. A single global
-        // threshold looks fine on an evenly-lit test image but falls apart
-        // on a real phone photo with any shadow or glare gradient across
-        // the frame, wiping out real text or turning noise into "text".
-        // Tesseract's own binarization is per-region/adaptive and handles
-        // that far better than a blanket threshold can.
         const imgData = ctx.getImageData(0, 0, w, h);
         const d = imgData.data;
-        for(let i=0; i<d.length; i+=4){
+
+        const gray = new Float32Array(w*h);
+        let sum = 0;
+        for(let i=0, p=0; i<d.length; i+=4, p++){
           const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
-          d[i] = d[i+1] = d[i+2] = g;
+          gray[p] = g;
+          sum += g;
         }
-        ctx.putImageData(imgData, 0, 0);
-        canvas.toBlob(blob=>{
+        const mean = sum / gray.length;
+
+        // Every test photo so far is a light label against a large dark
+        // background (leather, plastic, table) — and the OCR results
+        // consistently contained the real text buried in noise from that
+        // background. So: find the bright (label) region and crop to it
+        // before OCR ever sees the rest of the frame, instead of asking
+        // Tesseract's page-segmentation mode to somehow ignore it. A row/
+        // column only counts as "in" the label band once a real fraction
+        // of it is bright, so a single glare speck or stray highlight
+        // can't drag the crop box out to the whole image.
+        const rowCounts = new Float32Array(h);
+        const colCounts = new Float32Array(w);
+        for(let y=0; y<h; y++){
+          for(let x=0; x<w; x++){
+            if(gray[y*w+x] > mean){ rowCounts[y]++; colCounts[x]++; }
+          }
+        }
+        const rowThresh = w * 0.15;
+        const colThresh = h * 0.15;
+        let top=0, bottom=h-1, left=0, right=w-1;
+        while(top<bottom && rowCounts[top] < rowThresh) top++;
+        while(bottom>top && rowCounts[bottom] < rowThresh) bottom--;
+        while(left<right && colCounts[left] < colThresh) left++;
+        while(right>left && colCounts[right] < colThresh) right--;
+
+        const padX = Math.round((right-left) * 0.08) + 6;
+        const padY = Math.round((bottom-top) * 0.08) + 6;
+        const cropFound = (right-left) > 20 && (bottom-top) > 10 &&
+                           !(top===0 && bottom===h-1 && left===0 && right===w-1);
+        const cx = cropFound ? Math.max(0, left-padX) : 0;
+        const cy = cropFound ? Math.max(0, top-padY) : 0;
+        const cw = cropFound ? Math.min(w, right+padX) - cx : w;
+        const ch = cropFound ? Math.min(h, bottom+padY) - cy : h;
+
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = cw; outCanvas.height = ch;
+        const outCtx = outCanvas.getContext('2d');
+        // Re-draw grayscale pixels (already computed above) into the cropped canvas
+        const outData = outCtx.createImageData(cw, ch);
+        for(let y=0; y<ch; y++){
+          for(let x=0; x<cw; x++){
+            const srcP = (y+cy)*w + (x+cx);
+            const v = gray[srcP];
+            const di = (y*cw+x)*4;
+            outData.data[di] = outData.data[di+1] = outData.data[di+2] = v;
+            outData.data[di+3] = 255;
+          }
+        }
+        outCtx.putImageData(outData, 0, 0);
+        outCanvas.toBlob(blob=>{
           if(blob) resolve(blob); else reject(new Error('圖片前處理失敗'));
         }, 'image/png');
       }catch(err){ reject(err); }
@@ -866,13 +913,13 @@ function getOcrWorker(){
   if(!ocrWorkerPromise){
     ocrWorkerPromise = Tesseract.createWorker('eng').then(async worker=>{
       await worker.setParameters({
-        // SPARSE_TEXT: "find as much text as possible in no particular
-        // order" — for a small text region inside a much larger plain or
-        // textured background, not a page that's assumed to be full of
-        // text. The previous SINGLE_BLOCK setting told Tesseract to treat
-        // the whole photo as dense text, which likely made it read the
-        // leather/plastic background texture as "text" too.
-        tessedit_pageseg_mode: '11',
+        // AUTO (Tesseract's own default): the real fix for the background-
+        // texture hallucination is the crop in preprocessImageForOcr above,
+        // which removes most of the non-label background before OCR runs
+        // at all. With that in place, overriding the segmentation mode is
+        // no longer trying to compensate for a full noisy frame, so it's
+        // left at Tesseract's own default rather than guessed again.
+        tessedit_pageseg_mode: '3',
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/:()%+- ',
       });
       return worker;
@@ -1185,6 +1232,11 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
     const metaPre = collect();
     const missing = validate(metaPre);
     if(missing.length){ showToast('請先填寫：'+missing.join('、')); return; }
+    // Explain the two-step flow BEFORE the share sheet appears — it pops up
+    // almost instantly once triggered, so a toast shown at the same time
+    // would likely be covered/missed. confirm() blocks until read.
+    const proceed = window.confirm('接下來會先跳出「儲存」畫面：請選擇「儲存到「檔案」」。存好之後，把那個畫面關掉（選好或滑掉都可以），就會自動接著開啟郵件、帶入收件人。');
+    if(!proceed) return;
     showToast('產生報告中...', 6000);
     const {blob, meta} = await generateBlob();
     const name = fileName(meta, 'xlsx');
@@ -1192,9 +1244,10 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
     const shareText = `${meta.projectName || 'BIOS'} ECN Test Report`;
     const mailBody = `報告檔名：${name}\n請在這封郵件手動附加該檔案後再寄出（iOS 郵件無法由網頁自動附加附件，這是系統限制）。`;
     const mailto = `mailto:${encodeURIComponent(meta.mailTo||DEFAULT_MAILTO)}?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(mailBody)}`;
-    if(result === 'shared') showToast('存檔選單裡記得選「儲存到「檔案」」，接著開啟郵件並帶入收件人...', 4500);
-    else showToast('已下載報告，正在開啟郵件並帶入收件人...', 4000);
-    setTimeout(()=>{ window.location.href = mailto; }, 900);
+    if(result === 'shared') showToast('正在開啟郵件並帶入收件人...', 3500);
+    else if(result === 'downloaded') showToast('已下載報告，正在開啟郵件並帶入收件人...', 3500);
+    else showToast('正在開啟郵件...', 2500);
+    setTimeout(()=>{ window.location.href = mailto; }, 700);
   }catch(err){
     console.error(err);
     showToast('寄出失敗：'+(err && err.message ? err.message : '未知錯誤'), 4000);
