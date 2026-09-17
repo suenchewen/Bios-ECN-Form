@@ -1041,6 +1041,7 @@ function b64ToBuf(b64){
 }
 
 const UNIFORM_FONT = { name:'Calibri', size:9, bold:false };
+const SIGNOFF_FONT = { name:'Calibri', size:12, bold:true };
 const CENTER_ALIGN = { horizontal:'center', vertical:'middle' };
 
 async function generateBlob(){
@@ -1057,12 +1058,12 @@ async function generateBlob(){
       if(centered) cell.alignment = Object.assign({}, cell.alignment, CENTER_ALIGN);
     }
   };
-  const appendToLabel = (addr, val)=>{
+  const appendToLabel = (addr, val, font)=>{
     if(!val) return;
     const cell = ws.getCell(addr);
     const cur = cell.value;
     cell.value = (cur == null ? '' : String(cur)) + val;
-    cell.font = UNIFORM_FONT;
+    cell.font = font || UNIFORM_FONT;
   };
   const writeMark = (addr, text)=>{
     const cell = ws.getCell(addr);
@@ -1239,9 +1240,9 @@ async function generateBlob(){
     cell.alignment = Object.assign({}, cell.alignment, {wrapText:true});
   }
 
-  appendToLabel(`A${R(61)}`, f.approvedBy);
-  appendToLabel(`E${R(61)}`, f.checkedBy);
-  appendToLabel(`H${R(61)}`, f.testedBy);
+  appendToLabel(`A${R(61)}`, f.approvedBy, SIGNOFF_FONT);
+  appendToLabel(`E${R(61)}`, f.checkedBy, SIGNOFF_FONT);
+  appendToLabel(`H${R(61)}`, f.testedBy, SIGNOFF_FONT);
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
