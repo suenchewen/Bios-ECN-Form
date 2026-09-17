@@ -1046,6 +1046,7 @@ const UNIFORM_FONT = { name:'Calibri', size:9, bold:false };
 const SIGNOFF_FONT = { name:'Calibri', size:12, bold:true };
 const CENTER_ALIGN = { horizontal:'center', vertical:'middle' };
 const RIGHT_MIDDLE_ALIGN = { horizontal:'right', vertical:'middle' };
+const LEFT_MIDDLE_ALIGN = { horizontal:'left', vertical:'middle' };
 const THIN = { style:'thin' };
 const MEDIUM = { style:'medium' };
 
@@ -1146,11 +1147,12 @@ async function generateBlob(){
   const ecnExtra = Math.max(0, ecnLines.length - 3);
   if(ecnExtra > 0){
     insertRowsAt(16, ecnExtra);
-    const styleSrc = ws.getCell('A15').style;
+    const cols = ['A','B','C','D','E','F','G','H','I','J'];
+    const styleSrcs = cols.map(c=> ws.getCell(`${c}15`).style);
     for(let k=0;k<ecnExtra;k++){
       const row = 16+k;
       ws.mergeCells(`A${row}:J${row}`);
-      ws.getCell(`A${row}`).style = JSON.parse(JSON.stringify(styleSrc));
+      cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(styleSrcs[ci])); });
     }
   }
   const ecnAddrs = [];
@@ -1165,11 +1167,12 @@ async function generateBlob(){
   const remarkExtra = Math.max(0, remarkLines.length - 4);
   if(remarkExtra > 0){
     insertRowsAt(remarkStart+4, remarkExtra);
-    const styleSrc = ws.getCell(`A${remarkStart+3}`).style;
+    const cols = ['A','B','C','D','E','F','G','H','I','J'];
+    const styleSrcs = cols.map(c=> ws.getCell(`${c}${remarkStart+3}`).style);
     for(let k=0;k<remarkExtra;k++){
       const row = remarkStart+4+k;
       ws.mergeCells(`A${row}:J${row}`);
-      ws.getCell(`A${row}`).style = JSON.parse(JSON.stringify(styleSrc));
+      cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(styleSrcs[ci])); });
     }
   }
   const remarkAddrs = [];
@@ -1222,17 +1225,21 @@ async function generateBlob(){
       const row = insertAt+idx;
       const num = 51 + RESERVED_SLOTS.length + idx;
       ws.mergeCells(`B${row}:C${row}`);
-      // Match the grid lines the rest of the table uses (thin all round,
-      // medium on the outer left edge) so these extra rows don't look
-      // like they're missing borders compared to items 1-54.
-      ['A','B','C','D','E'].forEach(col=>{
+      // Match the grid lines the rest of the table uses across its FULL
+      // outer width (A through J, not just the A-E half these rows use),
+      // so the table's outer frame stays continuous through these extra
+      // rows: medium on the left edge (A), medium on the right edge (J,
+      // matching the template's own right-edge weight for this table),
+      // thin everywhere else.
+      ['A','B','C','D','E','F','G','H','I','J'].forEach(col=>{
         ws.getCell(`${col}${row}`).border = {
-          top: THIN, bottom: THIN, right: THIN,
+          top: THIN, bottom: THIN,
           left: col==='A' ? MEDIUM : THIN,
+          right: col==='J' ? MEDIUM : THIN,
         };
       });
       set(`A${row}`, num, true);              // item number: centered
-      set(`B${row}`, it.name.trim(), RIGHT_MIDDLE_ALIGN); // functions text: right-aligned, vertically centered
+      set(`B${row}`, it.name.trim(), LEFT_MIDDLE_ALIGN); // functions text: left-aligned, vertically centered
       pf(`D${row}`, `E${row}`, it.status);
     });
   }
