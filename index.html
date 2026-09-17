@@ -432,17 +432,24 @@ details[open] > summary .chev{transform:rotate(90deg);}
   <div class="group">
     <div class="group-title">寄送 Email</div>
     <div class="card">
-      <div class="row"><label class="field-label">收件人 Email</label><input type="text" id="mailTo" placeholder="name@company.com" value="marslin@biostar.com.tw,kaitin@biostar.com.tw,jackysun@biostar.com.tw,john@biostar.com.tw,emily@biostar.com.tw,frank@biostar.com.tw,kevinhuang@biostar.com.tw,howard@biostar.com.tw"></div>
+      <div id="recipientList"></div>
+      <div class="row">
+        <input type="text" id="newRecipientInput" placeholder="輸入新的收件人 Email" style="text-align:left;">
+        <button type="button" id="btnAddRecipient" class="cam-btn" title="新增收件人">＋</button>
+      </div>
     </div>
-    <div class="hint">收件人已預設常用名單，可自行刪改。按「寄出 Email」會先下載 Excel 報告，接著開啟郵件 App 並帶入上面的收件人與主旨，請在郵件裡手動附加剛剛下載的檔案（iOS 郵件 App 無法透過網頁自動附加檔案，這是系統限制）。</div>
+    <div class="hint">收件人已預設常用名單，可自行新增或移除。按「寄出 Email」會先下載 Excel 報告，接著開啟郵件 App 並帶入上面的收件人與主旨，請在郵件裡手動附加剛剛下載的檔案（iOS 郵件 App 無法透過網頁自動附加檔案，這是系統限制）。</div>
   </div>
+
+  <div style="text-align:center; padding:18px 14px 6px; font-size:11.5px; color:var(--sub);">Create by SUN</div>
 
 </div>
 
 <div class="action-bar">
-  <button class="btn btn-secondary" id="btnExcel">👁 預覽 Excel</button>
+  <button class="btn btn-secondary" id="btnExcel">👁 預覽</button>
   <button class="btn btn-primary" id="btnEmail">✉️ 寄出 Email</button>
 </div>
+
 
 <div class="toast" id="toast"></div>
 
@@ -527,7 +534,7 @@ const appList = [
 "System properties information review",
 ];
 
-const DEFAULT_MAILTO = "marslin@biostar.com.tw,kaitin@biostar.com.tw,jackysun@biostar.com.tw,john@biostar.com.tw,emily@biostar.com.tw,frank@biostar.com.tw,kevinhuang@biostar.com.tw,howard@biostar.com.tw";
+let recipientEmails = "marslin@biostar.com.tw,kaitin@biostar.com.tw,jackysun@biostar.com.tw,john@biostar.com.tw,emily@biostar.com.tw,frank@biostar.com.tw,kevinhuang@biostar.com.tw,howard@biostar.com.tw".split(',');
 
 const state = { basic:{}, suspend:{}, app:{} };
 let customItems = []; // [{name:'', status:null|'pass'|'fail'|'na'}]
@@ -595,6 +602,18 @@ function renderCustomItems(){
 }
 renderCustomItems();
 
+/* ---------------- Render: recipient list ---------------- */
+function renderRecipients(){
+  const wrap = document.getElementById('recipientList');
+  if(!wrap) return;
+  wrap.innerHTML = recipientEmails.map((email, idx)=>`
+    <div class="row">
+      <div class="field-label" style="flex:1; text-align:left; overflow-wrap:break-word; min-width:0;">${escapeHtml(email)}</div>
+      <button type="button" class="remove-item-btn remove-recipient-btn" data-idx="${idx}" title="移除">✕</button>
+    </div>`).join('');
+}
+renderRecipients();
+
 /* ---------------- Click / input delegation ---------------- */
 document.body.addEventListener('click', (e)=>{
   const btn = e.target.closest('.toggle-btn');
@@ -622,6 +641,14 @@ document.body.addEventListener('click', (e)=>{
     return;
   }
 
+  const removeRecipientBtn = e.target.closest('.remove-recipient-btn');
+  if(removeRecipientBtn){
+    const idx = parseInt(removeRecipientBtn.dataset.idx,10);
+    recipientEmails.splice(idx,1);
+    renderRecipients();
+    return;
+  }
+
   const removeBtn = e.target.closest('.remove-item-btn');
   if(removeBtn){
     const idx = parseInt(removeBtn.dataset.idx,10);
@@ -637,12 +664,30 @@ document.body.addEventListener('click', (e)=>{
     if(inputs.length) inputs[inputs.length-1].focus();
     return;
   }
+
+  if(e.target.id === 'btnAddRecipient'){
+    const input = document.getElementById('newRecipientInput');
+    const val = input.value.trim();
+    if(val){
+      recipientEmails.push(val);
+      input.value = '';
+      renderRecipients();
+    }
+    return;
+  }
 });
 
 document.body.addEventListener('input', (e)=>{
   if(e.target.classList.contains('custom-item-input')){
     const idx = parseInt(e.target.dataset.idx,10);
     if(customItems[idx]) customItems[idx].name = e.target.value;
+  }
+});
+
+document.body.addEventListener('keydown', (e)=>{
+  if(e.target.id === 'newRecipientInput' && e.key === 'Enter'){
+    e.preventDefault();
+    document.getElementById('btnAddRecipient').click();
   }
 });
 
@@ -670,7 +715,7 @@ function showToast(msg, ms=2600){
 /* ---------------- Collect / restore form fields ---------------- */
 const FIELD_IDS = ['testDate','estDate','projectName','pcbVer','pcbNo','modelName','mbDriver',
   'biosDatecode','checkSum','cpu','hdd','power','memory','vga','os','ecnDesc','remark',
-  'markVer','markScore','approvedBy','checkedBy','testedBy','mailTo'];
+  'markVer','markScore','approvedBy','checkedBy','testedBy'];
 
 function collect(){
   const v = id => document.getElementById(id).value.trim();
@@ -726,7 +771,6 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
   const ok = window.confirm('確定要清空目前所有已填寫的內容嗎？此動作無法復原。');
   if(!ok) return;
   FIELD_IDS.forEach(id=>{
-    if(id === 'mailTo') return;
     const el = document.getElementById(id);
     if(el) el.value = '';
   });
@@ -756,6 +800,7 @@ function serializeDraft(){
     suspend: state.suspend,
     app: state.app,
     customItems: customItems,
+    recipientEmails: recipientEmails,
   }, null, 0);
 }
 
@@ -770,6 +815,7 @@ function refreshAllToggleUI(){
     }
   });
   renderCustomItems();
+  renderRecipients();
   updateCounters();
 }
 
@@ -784,6 +830,9 @@ function applyDraft(obj){
   state.suspend = obj.suspend || {};
   state.app = obj.app || {};
   customItems = Array.isArray(obj.customItems) ? obj.customItems : [];
+  if(Array.isArray(obj.recipientEmails) && obj.recipientEmails.length){
+    recipientEmails = obj.recipientEmails;
+  }
   refreshAllToggleUI();
 }
 
@@ -920,16 +969,17 @@ function preprocessImageForOcr(file){
 let ocrWorkerPromise = null;
 function getOcrWorker(){
   if(!ocrWorkerPromise){
-    ocrWorkerPromise = Tesseract.createWorker('eng').then(async worker=>{
+    ocrWorkerPromise = Tesseract.createWorker(['eng','chi_tra']).then(async worker=>{
       await worker.setParameters({
-        // AUTO (Tesseract's own default): the real fix for the background-
-        // texture hallucination is the crop in preprocessImageForOcr above,
-        // which removes most of the non-label background before OCR runs
-        // at all. With that in place, overriding the segmentation mode is
-        // no longer trying to compensate for a full noisy frame, so it's
-        // left at Tesseract's own default rather than guessed again.
+        // The USB adapter label photo showed every English/numeric segment
+        // (model number, voltage, date) decoding correctly while every
+        // Chinese segment turned to garbage — the classic signature of an
+        // English-only language model meeting Chinese text. Real hardware
+        // labels here mix Traditional Chinese with English/numbers, so
+        // both languages are now loaded together. The old Latin-only
+        // whitelist is dropped too, since it would otherwise block every
+        // Chinese character it now needs to output.
         tessedit_pageseg_mode: '3',
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/:()%+- ',
       });
       return worker;
     });
@@ -941,7 +991,7 @@ async function runOcrToField(file, fieldId){
   const camBtn = document.querySelector(`.cam-btn[data-target="${fieldId}"]`);
   const original = camBtn ? camBtn.textContent : '';
   if(camBtn){ camBtn.textContent='⏳'; camBtn.disabled = true; }
-  showToast('辨識文字中，第一次使用需要網路下載辨識模型，請稍候...', 9000);
+  showToast('辨識文字中，第一次使用需要網路下載中英文辨識模型（比之前稍久），請稍候...', 12000);
   try{
     const processed = await preprocessImageForOcr(file).catch(()=>null);
     const worker = await getOcrWorker();
@@ -991,6 +1041,7 @@ function b64ToBuf(b64){
 }
 
 const UNIFORM_FONT = { name:'Calibri', size:9, bold:false };
+const CENTER_ALIGN = { horizontal:'center', vertical:'middle' };
 
 async function generateBlob(){
   const f = collect();
@@ -998,11 +1049,12 @@ async function generateBlob(){
   await wb.xlsx.load(b64ToBuf(TEMPLATE_B64));
   const ws = wb.getWorksheet('BIOS ECN');
 
-  const set = (addr, val)=>{
+  const set = (addr, val, centered)=>{
     if(val !== undefined && val !== null && String(val) !== ''){
       const cell = ws.getCell(addr);
       cell.value = val;
       cell.font = UNIFORM_FONT;
+      if(centered) cell.alignment = Object.assign({}, cell.alignment, CENTER_ALIGN);
     }
   };
   const appendToLabel = (addr, val)=>{
@@ -1016,7 +1068,7 @@ async function generateBlob(){
     const cell = ws.getCell(addr);
     cell.value = text;
     cell.font = UNIFORM_FONT;
-    cell.alignment = Object.assign({}, cell.alignment, {horizontal:'center', vertical:'middle'});
+    cell.alignment = Object.assign({}, cell.alignment, CENTER_ALIGN);
   };
   const pf = (passAddr, failAddr, status)=>{
     if(status === 'pass') writeMark(passAddr, 'v');
@@ -1038,42 +1090,108 @@ async function generateBlob(){
     }
   };
 
-  set('C2', f.testDate);
-  set('H2', f.estDate);
+  // Reusable: insert `count` blank rows starting at `atRow`, correctly
+  // shifting every merge at/below that point down with the values/styles
+  // (ExcelJS's spliceRows moves cell content fine on its own, but leaves
+  // merged-cell ranges where they were, so those are unmerged first and
+  // re-merged at their new position — the same technique already proven
+  // correct for the 55+ custom-item case, now shared by all three
+  // insertion points below).
+  const insertRowsAt = (atRow, count)=>{
+    if(count <= 0) return;
+    const mergeRe = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
+    const shiftMerges = [];
+    ws.model.merges.forEach(m=>{
+      const mm = m.match(mergeRe);
+      if(mm){
+        const r1 = parseInt(mm[2],10), r2 = parseInt(mm[4],10);
+        if(r1 >= atRow) shiftMerges.push({old:m, c1:mm[1], r1, c2:mm[3], r2});
+      }
+    });
+    shiftMerges.forEach(sm=> ws.unMergeCells(sm.old));
+    const blanks = Array.from({length:count}, ()=>[]);
+    ws.spliceRows(atRow, 0, ...blanks);
+    shiftMerges.forEach(sm=>{
+      ws.mergeCells(`${sm.c1}${sm.r1+count}:${sm.c2}${sm.r2+count}`);
+    });
+  };
+
+  set('C2', f.testDate, true);
+  set('H2', f.estDate, true);
   set('C4', f.projectName);
   if(f.pcbVer || f.pcbNo) set('H4', `${f.pcbVer}${f.pcbVer&&f.pcbNo?' / ':''}${f.pcbNo}`);
   set('C5', f.modelName);
   set('H5', f.mbDriver);
   set('C6', f.biosDatecode);
   set('H6', f.checkSum);
-  set('C8', f.cpu);
-  set('H8', f.hdd);
-  set('H9', f.power);
-  set('C10', f.memory);
-  set('H10', f.vga);
-  set('H11', f.os);
-  fillLines(['A13','A14','A15'], f.ecnDesc);
-  fillLines(['A17','A18','A19','A20'], f.remark);
+  set('C8', f.cpu, true);
+  set('H8', f.hdd, true);
+  set('H9', f.power, true);
+  set('C10', f.memory, true);
+  set('H10', f.vga, true);
+  set('H11', f.os, true);
+
+  // ECN Focus Test Description: template gives 3 fixed rows (13-15). If the
+  // text needs more, extra rows are inserted right before the "Remark or
+  // Issue" header (originally row 16) instead of cramming everything past
+  // the 3rd line into the last cell.
+  const ecnLines = String(f.ecnDesc||'').split(/\r?\n/).filter(l=>l!=='');
+  const ecnExtra = Math.max(0, ecnLines.length - 3);
+  if(ecnExtra > 0){
+    insertRowsAt(16, ecnExtra);
+    const styleSrc = ws.getCell('A15').style;
+    for(let k=0;k<ecnExtra;k++){
+      const row = 16+k;
+      ws.mergeCells(`A${row}:J${row}`);
+      ws.getCell(`A${row}`).style = JSON.parse(JSON.stringify(styleSrc));
+    }
+  }
+  const ecnAddrs = [];
+  for(let r=13; r<=15+ecnExtra; r++) ecnAddrs.push('A'+r);
+  fillLines(ecnAddrs, f.ecnDesc);
+
+  // Remark or Issue: same idea, template gives 4 fixed rows, now starting
+  // at (17 + ecnExtra) since the block above may have already shifted
+  // everything down. Extra rows go right before "On Board Basic Function".
+  const remarkStart = 17 + ecnExtra;
+  const remarkLines = String(f.remark||'').split(/\r?\n/).filter(l=>l!=='');
+  const remarkExtra = Math.max(0, remarkLines.length - 4);
+  if(remarkExtra > 0){
+    insertRowsAt(remarkStart+4, remarkExtra);
+    const styleSrc = ws.getCell(`A${remarkStart+3}`).style;
+    for(let k=0;k<remarkExtra;k++){
+      const row = remarkStart+4+k;
+      ws.mergeCells(`A${row}:J${row}`);
+      ws.getCell(`A${row}`).style = JSON.parse(JSON.stringify(styleSrc));
+    }
+  }
+  const remarkAddrs = [];
+  for(let r=remarkStart; r<=remarkStart+3+remarkExtra; r++) remarkAddrs.push('A'+r);
+  fillLines(remarkAddrs, f.remark);
+
+  // Everything from here down was originally anchored at row 21 ("On Board
+  // Basic Function") — it now sits `topOffset` rows lower because of any
+  // ECN/Remark insertions above.
+  const topOffset = ecnExtra + remarkExtra;
+  const R0 = (base)=> base + topOffset;
 
   for(let i=1;i<=27;i++){
-    const row = 22+i;
+    const row = R0(22+i);
     pf('D'+row, 'E'+row, state.basic[i]);
   }
   for(let i=28;i<=50;i++){
-    const row = 23 + (i-28);
+    const row = R0(23 + (i-28));
     pf('I'+row, 'J'+row, state.basic[i]);
   }
 
   // Items 51-54: the template already reserves these rows (F46/47/48 are
   // pre-printed "51/52/53"; row 49's right side is a 4th blank slot) right
   // next to items 24-27, inside the existing grid — no row insertion
-  // needed, and nothing below has to move.
-  const RESERVED_SLOTS = [
-    {numAddr:'F46', nameAddr:'G46', passAddr:'I46', failAddr:'J46', prefilled:true},
-    {numAddr:'F47', nameAddr:'G47', passAddr:'I47', failAddr:'J47', prefilled:true},
-    {numAddr:'F48', nameAddr:'G48', passAddr:'I48', failAddr:'J48', prefilled:true},
-    {numAddr:'F49', nameAddr:'G49', passAddr:'I49', failAddr:'J49', prefilled:false},
-  ];
+  // needed there, just the same topOffset.
+  const RESERVED_SLOTS = [46,47,48,49].map((base,idx)=>{
+    const row = R0(base);
+    return { numAddr:`F${row}`, nameAddr:`G${row}`, passAddr:`I${row}`, failAddr:`J${row}`, prefilled: idx<3 };
+  });
   const items = (customItems||[]).filter(it=>it.name && it.name.trim()!=='');
   const reservedUsed = Math.min(items.length, RESERVED_SLOTS.length);
   for(let i=0;i<reservedUsed;i++){
@@ -1085,32 +1203,16 @@ async function generateBlob(){
   }
 
   // A 5th+ custom item has no reserved slot left, so (and only then) new
-  // rows are inserted after row 49, numbered starting at 55, shifting
-  // Suspend Test / Application Software Test / sign-off down to make room.
+  // rows are inserted right after the reserved-slot block, numbered
+  // starting at 55, shifting Suspend Test / Application Software Test /
+  // sign-off down to make room.
   const overflow = items.slice(RESERVED_SLOTS.length);
   const N = overflow.length;
   if(N > 0){
-    const FIXED_START = 50;
-    const mergeRe = /^([A-Z]+)(\d+):([A-Z]+)(\d+)$/;
-    const shiftMerges = [];
-    ws.model.merges.forEach(m=>{
-      const mm = m.match(mergeRe);
-      if(mm){
-        const r1 = parseInt(mm[2],10), r2 = parseInt(mm[4],10);
-        if(r1 >= FIXED_START) shiftMerges.push({old:m, c1:mm[1], r1, c2:mm[3], r2});
-      }
-    });
-    shiftMerges.forEach(sm=> ws.unMergeCells(sm.old));
-
-    const blanks = Array.from({length:N}, ()=>[]);
-    ws.spliceRows(FIXED_START, 0, ...blanks);
-
-    shiftMerges.forEach(sm=>{
-      ws.mergeCells(`${sm.c1}${sm.r1+N}:${sm.c2}${sm.r2+N}`);
-    });
-
+    const insertAt = R0(50);
+    insertRowsAt(insertAt, N);
     overflow.forEach((it, idx)=>{
-      const row = 50+idx;
+      const row = insertAt+idx;
       const num = 51 + RESERVED_SLOTS.length + idx;
       ws.mergeCells(`B${row}:C${row}`);
       set(`A${row}`, num);
@@ -1119,7 +1221,7 @@ async function generateBlob(){
     });
   }
 
-  const R = (base)=> base + N;
+  const R = (base)=> R0(base) + N;
   pf(`I${R(51)}`, `J${R(51)}`, state.suspend['S1']);
   pf(`I${R(52)}`, `J${R(52)}`, state.suspend['S3']);
   pf(`I${R(53)}`, `J${R(53)}`, state.suspend['S4']);
@@ -1259,7 +1361,8 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
     const result = await saveFile(blob, name);
     const shareText = `${meta.projectName || 'BIOS'} ECN Test Report`;
     const mailBody = `報告檔名：${name}\n請在這封郵件手動附加該檔案後再寄出（iOS 郵件無法由網頁自動附加附件，這是系統限制）。`;
-    const mailto = `mailto:${encodeURIComponent(meta.mailTo||DEFAULT_MAILTO)}?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(mailBody)}`;
+    const toList = recipientEmails.filter(e=>e && e.trim()!=='').join(',');
+    const mailto = `mailto:${encodeURIComponent(toList)}?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(mailBody)}`;
     if(result === 'shared') showToast('正在開啟郵件並帶入收件人...', 3500);
     else if(result === 'downloaded') showToast('已下載報告，正在開啟郵件並帶入收件人...', 3500);
     else showToast('正在開啟郵件...', 2500);
