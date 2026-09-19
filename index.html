@@ -1405,6 +1405,14 @@ async function generateBlob(){
   // existing 5 items (row 60 in template terms), before sign-off. Row 60
   // currently carries the table's closing (medium) bottom border — that
   // has to move down onto whichever row ends up last.
+  //
+  // Unlike Suspend Test, this table has "Operating System Installation"
+  // (template row 57) as a full-width divider sitting right above the last
+  // fixed item — with no divider of their own, custom items appended
+  // straight after "System properties..." read as if they were just more
+  // OS-installation sub-items. A "Custom Items" divider (cloned from that
+  // same row's bold/centered style) is inserted first so the new items are
+  // visibly their own group instead.
   const appItems = customItems.app.filter(it=>it.name && it.name.trim()!=='');
   const appN = appItems.length;
   if(appN > 0){
@@ -1413,16 +1421,24 @@ async function generateBlob(){
     // cell's own internal style object, not a snapshot, and row 60's
     // border is mutated a few lines below — without cloning now, that
     // later mutation would retroactively change what was "captured" here.
-    const normalStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(59)}`).style))); // normal (thin-bottom) row
-    const lastStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(60)}`).style)));   // current last (medium-bottom) row
+    const dividerStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(57)}`).style))); // "Operating System Installation" style
+    const normalStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(59)}`).style)));  // normal (thin-bottom) row
+    const lastStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(60)}`).style)));    // current last (medium-bottom) row
     const insertAt = R2(61);
-    insertRowsAt(insertAt, appN);
+    const appBlockRows = appN + 1; // +1 for the divider row
+    insertRowsAt(insertAt, appBlockRows);
     cols.forEach(c=>{
       const cell = ws.getCell(`${c}${R2(60)}`);
       cell.border = Object.assign({}, cell.border, { bottom: THIN });
     });
+    const dividerRow = insertAt;
+    cols.forEach((c,ci)=>{ ws.getCell(`${c}${dividerRow}`).style = JSON.parse(JSON.stringify(dividerStyleSrcs[ci])); });
+    ws.mergeCells(`A${dividerRow}:J${dividerRow}`);
+    // Not set() here on purpose: set() forces the 9pt uniform data font,
+    // which would stomp the bold/centered title font just cloned above.
+    ws.getCell(`A${dividerRow}`).value = 'Custom Items';
     appItems.forEach((it, idx)=>{
-      const row = insertAt+idx;
+      const row = insertAt+1+idx;
       const isLast = idx === appItems.length-1;
       const srcs = isLast ? lastStyleSrcs : normalStyleSrcs;
       cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(srcs[ci])); });
@@ -1432,7 +1448,7 @@ async function generateBlob(){
     });
   }
 
-  const R3 = (base)=> R2(base) + appN;
+  const R3 = (base)=> R2(base) + (appN > 0 ? appN+1 : 0);
   appendToLabel(`A${R3(61)}`, f.approvedBy, SIGNOFF_FONT);
   appendToLabel(`E${R3(61)}`, f.checkedBy, SIGNOFF_FONT);
   appendToLabel(`H${R3(61)}`, f.testedBy, SIGNOFF_FONT);
@@ -1492,14 +1508,26 @@ function buildPreviewHtml(){
 
   html += `<div class="pv-section"><div class="pv-section-title">Suspend Test</div>`;
   suspendList.forEach(s=>{ html += itemRow(s, state.suspend[s]); });
-  namedSuspendCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
   html += `</div>`;
+  if(namedSuspendCustom.length){
+    html += `<div class="pv-section"><div class="pv-section-title">Suspend Test - 自訂項目</div>`;
+    namedSuspendCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
+    html += `</div>`;
+  }
 
   html += `<div class="pv-section"><div class="pv-section-title">Application Software Test</div>`;
   appList.forEach((name,idx)=>{ html += itemRow(name, state.app[idx+1]); });
   if(f.markVer || f.markScore){ html += infoRow('3DMark', `Ver ${f.markVer||'—'} / Score ${f.markScore||'—'}`); }
-  namedAppCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
   html += `</div>`;
+  if(namedAppCustom.length){
+    // Kept as its own block (not appended under the fixed items above) to
+    // match the actual Excel output, which now inserts a "Custom Items"
+    // divider before these — without it, they read as if they were part
+    // of the "Operating System Installation" group right above them.
+    html += `<div class="pv-section"><div class="pv-section-title">Application Software Test - 自訂項目</div>`;
+    namedAppCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
+    html += `</div>`;
+  }
 
   html += `<div class="pv-section"><div class="pv-section-title">簽核</div>`
     + infoRow('Approved by', f.approvedBy) + infoRow('Checked by', f.checkedBy) + infoRow('Tested by', f.testedBy)
