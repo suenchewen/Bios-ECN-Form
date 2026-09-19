@@ -160,6 +160,25 @@ select{-webkit-appearance:none; appearance:none; background-image:url("data:imag
 .cam-btn:active{opacity:0.6;}
 .cam-btn:disabled{opacity:0.5;}
 
+/* CPU / HDD / Power / Memory / VGA / OS: label (+ camera button, where
+   there is one) sits on its own line, with a full-width, auto-growing
+   textarea below. A right-aligned single-line input can't show a long
+   spec string (typed or OCR'd) in full and is awkward to correct; this
+   wraps the text onto as many lines as needed so the whole value is
+   always visible and easy to tap into. */
+.row.cam-row, .row.full-row{display:block; padding:11px 14px;}
+.cam-row .cam-row-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px;}
+.cam-row .cam-row-head .field-label{min-width:0;}
+.full-row .field-label{display:block; margin-bottom:7px;}
+.row.cam-row textarea, .row.full-row textarea{
+  display:block; width:100%; box-sizing:border-box;
+  border:1px solid var(--line); border-radius:9px; background:#FAFBFC;
+  padding:9px 10px; font-size:15px; line-height:1.4; color:var(--ink);
+  text-align:left; font-family:inherit; outline:none; resize:none; overflow:hidden;
+  min-height:40px; flex:none;
+}
+.row.cam-row textarea:focus, .row.full-row textarea:focus{border-color:var(--accent); background:#fff;}
+
 .sub-head-row{display:flex; align-items:center; justify-content:space-between; padding:8px 14px 2px;}
 .add-item-row{padding:10px 14px 14px;}
 .add-item-btn{
@@ -318,32 +337,46 @@ details[open] > summary .chev{transform:rotate(90deg);}
   <div class="group">
     <div class="group-title">Configuration</div>
     <div class="card">
-      <div class="row"><label class="field-label">CPU</label><input type="text" id="cpu" placeholder="請輸入"></div>
-      <div class="row">
-        <label class="field-label">HDD</label>
-        <input type="text" id="hdd" placeholder="請輸入">
-        <button type="button" class="cam-btn" data-target="hdd" title="拍照辨識文字">📷</button>
+      <div class="row full-row">
+        <label class="field-label" for="cpu">CPU</label>
+        <textarea id="cpu" rows="1" enterkeyhint="done" placeholder="請輸入"></textarea>
+      </div>
+      <div class="row cam-row">
+        <div class="cam-row-head">
+          <label class="field-label" for="hdd">HDD</label>
+          <button type="button" class="cam-btn" data-target="hdd" title="拍照辨識文字">📷</button>
+        </div>
+        <textarea id="hdd" rows="1" enterkeyhint="done" placeholder="請輸入"></textarea>
         <input type="file" accept="image/*" capture="environment" class="cam-input" id="cam-hdd" hidden>
       </div>
-      <div class="row">
-        <label class="field-label">Power</label>
-        <input type="text" id="power" placeholder="請輸入">
-        <button type="button" class="cam-btn" data-target="power" title="拍照辨識文字">📷</button>
+      <div class="row cam-row">
+        <div class="cam-row-head">
+          <label class="field-label" for="power">Power</label>
+          <button type="button" class="cam-btn" data-target="power" title="拍照辨識文字">📷</button>
+        </div>
+        <textarea id="power" rows="1" enterkeyhint="done" placeholder="請輸入"></textarea>
         <input type="file" accept="image/*" capture="environment" class="cam-input" id="cam-power" hidden>
       </div>
-      <div class="row">
-        <label class="field-label">MEMORY</label>
-        <input type="text" id="memory" placeholder="請輸入">
-        <button type="button" class="cam-btn" data-target="memory" title="拍照辨識文字">📷</button>
+      <div class="row cam-row">
+        <div class="cam-row-head">
+          <label class="field-label" for="memory">MEMORY</label>
+          <button type="button" class="cam-btn" data-target="memory" title="拍照辨識文字">📷</button>
+        </div>
+        <textarea id="memory" rows="1" enterkeyhint="done" placeholder="請輸入"></textarea>
         <input type="file" accept="image/*" capture="environment" class="cam-input" id="cam-memory" hidden>
       </div>
-      <div class="row">
-        <label class="field-label">VGA</label>
-        <input type="text" id="vga" placeholder="請輸入">
-        <button type="button" class="cam-btn" data-target="vga" title="拍照辨識文字">📷</button>
+      <div class="row cam-row">
+        <div class="cam-row-head">
+          <label class="field-label" for="vga">VGA</label>
+          <button type="button" class="cam-btn" data-target="vga" title="拍照辨識文字">📷</button>
+        </div>
+        <textarea id="vga" rows="1" enterkeyhint="done" placeholder="請輸入"></textarea>
         <input type="file" accept="image/*" capture="environment" class="cam-input" id="cam-vga" hidden>
       </div>
-      <div class="row"><label class="field-label">OS</label><input type="text" id="os" placeholder="請輸入"></div>
+      <div class="row full-row">
+        <label class="field-label" for="os">OS</label>
+        <textarea id="os" rows="1" enterkeyhint="done" placeholder="請輸入"></textarea>
+      </div>
     </div>
   </div>
 
@@ -719,6 +752,23 @@ const FIELD_IDS = ['testDate','estDate','projectName','pcbVer','pcbNo','modelNam
   'biosDatecode','checkSum','cpu','hdd','power','memory','vga','os','ecnDesc','remark',
   'markVer','markScore','approvedBy','checkedBy','testedBy'];
 
+// HDD / Power / Memory / VGA now use auto-growing textareas (see .cam-row)
+// so a long spec string or OCR result is never clipped. Resizing has to be
+// re-applied by hand every time one of these is filled by something other
+// than the user typing into it — a fresh page load, a restored draft, or an
+// OCR result written straight into .value — since only real keystrokes fire
+// the 'input' event that normally drives the resize.
+const OCR_FIELD_IDS = ['hdd','power','memory','vga'];
+// CPU and OS have the same long-value problem but no camera button, so they
+// get the auto-grow treatment (see .full-row) without the OCR wiring.
+const PLAIN_AUTOGROW_FIELD_IDS = ['cpu','os'];
+const AUTOGROW_FIELD_IDS = OCR_FIELD_IDS.concat(PLAIN_AUTOGROW_FIELD_IDS);
+function autoGrowTextarea(el){
+  if(!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
 function collect(){
   const v = id => document.getElementById(id).value.trim();
   const out = {};
@@ -776,6 +826,7 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
     const el = document.getElementById(id);
     if(el) el.value = '';
   });
+  AUTOGROW_FIELD_IDS.forEach(id=> autoGrowTextarea(document.getElementById(id)));
   state.basic = {};
   state.suspend = {};
   state.app = {};
@@ -828,6 +879,7 @@ function applyDraft(obj){
     const el = document.getElementById(id);
     if(el && f[id] != null) el.value = f[id];
   });
+  AUTOGROW_FIELD_IDS.forEach(id=> autoGrowTextarea(document.getElementById(id)));
   state.basic = obj.basic || {};
   state.suspend = obj.suspend || {};
   state.app = obj.app || {};
@@ -1009,6 +1061,7 @@ async function runOcrToField(file, fieldId){
     } else {
       const input = document.getElementById(fieldId);
       input.value = text;
+      autoGrowTextarea(input);
       showToast('已自動帶入辨識結果，請確認內容是否正確');
     }
   }catch(err){
@@ -1021,7 +1074,24 @@ async function runOcrToField(file, fieldId){
   }
 }
 
-['hdd','power','memory','vga'].forEach(fieldId=>{
+// Shared by every auto-growing field (with or without a camera button):
+// resize as the user types, and size it correctly right away in case it
+// already has a value (e.g. a draft was restored before this runs).
+function wireAutoGrowField(fieldId){
+  const textEl = document.getElementById(fieldId);
+  if(!textEl) return;
+  autoGrowTextarea(textEl);
+  textEl.addEventListener('input', ()=> autoGrowTextarea(textEl));
+  // This is a single-value spec field (e.g. a model string), not a
+  // multi-line note, even though it now wraps to show everything — so
+  // Enter confirms/dismisses the keyboard instead of inserting a line
+  // break into the value that would end up inside the Excel cell.
+  textEl.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); textEl.blur(); }
+  });
+}
+
+OCR_FIELD_IDS.forEach(fieldId=>{
   const camBtn = document.querySelector(`.cam-btn[data-target="${fieldId}"]`);
   const camInput = document.getElementById('cam-'+fieldId);
   if(camBtn && camInput){
@@ -1032,7 +1102,11 @@ async function runOcrToField(file, fieldId){
       if(file) runOcrToField(file, fieldId);
     });
   }
+  wireAutoGrowField(fieldId);
 });
+
+// CPU / OS: same auto-grow + Enter handling, no camera button to wire.
+PLAIN_AUTOGROW_FIELD_IDS.forEach(wireAutoGrowField);
 
 /* ---------------- Fill original template via ExcelJS ---------------- */
 function b64ToBuf(b64){
