@@ -572,7 +572,10 @@ const appList = [
 let recipientEmails = "marslin@biostar.com.tw,kaitin@biostar.com.tw,jackysun@biostar.com.tw,john@biostar.com.tw,emily@biostar.com.tw,frank@biostar.com.tw,kevinhuang@biostar.com.tw,howard@biostar.com.tw".split(',');
 
 const state = { basic:{}, suspend:{}, app:{} };
-let customItems = []; // [{name:'', status:null|'pass'|'fail'|'na'}]
+// One custom-item list per section — Basic Function, Suspend Test, and
+// Application Software Test can each have their own manually-added items.
+// Each entry: {name:'', status:null|'pass'|'fail'|'na'}
+let customItems = { basic:[], suspend:[], app:[] };
 
 /* ---------------- Helpers ---------------- */
 function escapeHtml(s){
@@ -604,28 +607,39 @@ basicItemsEl.innerHTML =
   `<div class="sub-head">Items 28–50</div>` +
   basicRight.map(it=>renderItemRow('basic', it[0], it[1], it[2])).join('') +
   `<div class="sub-head">自訂項目（51+）</div>` +
-  `<div id="customItemsWrap"></div>` +
-  `<div class="add-item-row"><button type="button" id="btnAddItem" class="add-item-btn">＋ 新增項目</button></div>`;
+  `<div id="customItemsWrap-basic"></div>` +
+  `<div class="add-item-row"><button type="button" class="add-item-btn" data-addgroup="basic">＋ 新增項目</button></div>`;
 
 document.getElementById('suspendItems').innerHTML =
-  suspendList.map(s=>renderItemRow('suspend', s, s)).join('');
+  suspendList.map(s=>renderItemRow('suspend', s, s)).join('') +
+  `<div class="sub-head">自訂項目</div>` +
+  `<div id="customItemsWrap-suspend"></div>` +
+  `<div class="add-item-row"><button type="button" class="add-item-btn" data-addgroup="suspend">＋ 新增項目</button></div>`;
 
 document.getElementById('appItems').innerHTML =
-  appList.map((name,idx)=>renderItemRow('app', idx+1, name)).join('');
+  appList.map((name,idx)=>renderItemRow('app', idx+1, name)).join('') +
+  `<div class="sub-head">自訂項目</div>` +
+  `<div id="customItemsWrap-app"></div>` +
+  `<div class="add-item-row"><button type="button" class="add-item-btn" data-addgroup="app">＋ 新增項目</button></div>`;
 
 /* ---------------- Render: custom items ---------------- */
-function renderCustomItems(){
-  const wrap = document.getElementById('customItemsWrap');
+// Basic Function items are numbered (51, 52, ...), matching the template's
+// own reserved slots — Suspend Test / Application Software Test rows have
+// no numbers in the template either (just "S1", "Reboot (loop10)", etc.),
+// so their custom items show a free-text label with no number badge.
+function renderCustomItems(group){
+  const wrap = document.getElementById('customItemsWrap-'+group);
   if(!wrap) return;
-  wrap.innerHTML = customItems.map((item, idx)=>{
-    const num = 51+idx;
-    const mk = (kind,label)=>`<button type="button" class="toggle-btn ${kind} ${item.status===kind?'active':''}" data-group="custom" data-id="${idx}" data-kind="${kind}">${label}</button>`;
+  const list = customItems[group];
+  const showNumber = group === 'basic';
+  wrap.innerHTML = list.map((item, idx)=>{
+    const mk = (kind,label)=>`<button type="button" class="toggle-btn ${kind} ${item.status===kind?'active':''}" data-group="custom-${group}" data-id="${idx}" data-kind="${kind}">${label}</button>`;
     return `<div class="item-row custom-item-row">
       <div class="item-top">
         <div class="custom-item-head">
-          <div class="item-num">${num}</div>
-          <input type="text" class="custom-item-input" data-idx="${idx}" placeholder="輸入測試項目名稱" value="${escapeHtml(item.name)}">
-          <button type="button" class="remove-item-btn" data-idx="${idx}" title="刪除此項目">✕</button>
+          ${showNumber ? `<div class="item-num">${51+idx}</div>` : ''}
+          <input type="text" class="custom-item-input" data-group="${group}" data-idx="${idx}" placeholder="輸入測試項目名稱" value="${escapeHtml(item.name)}">
+          <button type="button" class="remove-item-btn" data-group="${group}" data-idx="${idx}" title="刪除此項目">✕</button>
         </div>
         <div class="toggle-group">
           ${mk('pass','Pass')}${mk('fail','Fail')}${mk('na','N/A')}
@@ -635,7 +649,7 @@ function renderCustomItems(){
   }).join('');
   updateCounters();
 }
-renderCustomItems();
+['basic','suspend','app'].forEach(renderCustomItems);
 
 /* ---------------- Render: recipient list ---------------- */
 function renderRecipients(){
@@ -654,9 +668,10 @@ document.body.addEventListener('click', (e)=>{
   const btn = e.target.closest('.toggle-btn');
   if(btn){
     const {group, id, kind} = btn.dataset;
-    if(group === 'custom'){
+    if(group && group.indexOf('custom-') === 0){
+      const cgroup = group.slice(7);
       const idx = parseInt(id,10);
-      const item = customItems[idx];
+      const item = customItems[cgroup] && customItems[cgroup][idx];
       if(item){
         item.status = (item.status === kind) ? null : kind;
         const row = btn.closest('.item-row');
@@ -685,18 +700,25 @@ document.body.addEventListener('click', (e)=>{
   }
 
   const removeBtn = e.target.closest('.remove-item-btn');
-  if(removeBtn){
+  if(removeBtn && removeBtn.dataset.group){
+    const g = removeBtn.dataset.group;
     const idx = parseInt(removeBtn.dataset.idx,10);
-    customItems.splice(idx,1);
-    renderCustomItems();
+    if(customItems[g]){
+      customItems[g].splice(idx,1);
+      renderCustomItems(g);
+    }
     return;
   }
 
-  if(e.target.id === 'btnAddItem'){
-    customItems.push({name:'', status:null});
-    renderCustomItems();
-    const inputs = document.querySelectorAll('.custom-item-input');
-    if(inputs.length) inputs[inputs.length-1].focus();
+  const addBtn = e.target.closest('.add-item-btn');
+  if(addBtn){
+    const g = addBtn.dataset.addgroup;
+    if(customItems[g]){
+      customItems[g].push({name:'', status:null});
+      renderCustomItems(g);
+      const inputs = document.querySelectorAll(`.custom-item-input[data-group="${g}"]`);
+      if(inputs.length) inputs[inputs.length-1].focus();
+    }
     return;
   }
 
@@ -714,8 +736,9 @@ document.body.addEventListener('click', (e)=>{
 
 document.body.addEventListener('input', (e)=>{
   if(e.target.classList.contains('custom-item-input')){
+    const g = e.target.dataset.group;
     const idx = parseInt(e.target.dataset.idx,10);
-    if(customItems[idx]) customItems[idx].name = e.target.value;
+    if(customItems[g] && customItems[g][idx]) customItems[g][idx].name = e.target.value;
   }
 });
 
@@ -727,15 +750,19 @@ document.body.addEventListener('keydown', (e)=>{
 });
 
 function updateCounters(){
-  const namedCustom = customItems.filter(i=>i.name && i.name.trim()!=='');
-  const basicDone = Object.values(state.basic).filter(Boolean).length + namedCustom.filter(i=>i.status).length;
-  const basicTotal = 50 + namedCustom.length;
-  const suspendDone = Object.values(state.suspend).filter(Boolean).length;
-  const appDone = Object.values(state.app).filter(Boolean).length;
+  const namedBasic = customItems.basic.filter(i=>i.name && i.name.trim()!=='');
+  const namedSuspend = customItems.suspend.filter(i=>i.name && i.name.trim()!=='');
+  const namedApp = customItems.app.filter(i=>i.name && i.name.trim()!=='');
+  const basicDone = Object.values(state.basic).filter(Boolean).length + namedBasic.filter(i=>i.status).length;
+  const basicTotal = 50 + namedBasic.length;
+  const suspendDone = Object.values(state.suspend).filter(Boolean).length + namedSuspend.filter(i=>i.status).length;
+  const suspendTotal = 3 + namedSuspend.length;
+  const appDone = Object.values(state.app).filter(Boolean).length + namedApp.filter(i=>i.status).length;
+  const appTotal = 5 + namedApp.length;
   document.getElementById('basicCnt').textContent = `${basicDone} / ${basicTotal} 已測試`;
   document.getElementById('basicProgress').style.width = (basicTotal ? basicDone/basicTotal*100 : 0)+'%';
-  document.getElementById('suspendCnt').textContent = `${suspendDone} / 3 已測試`;
-  document.getElementById('appCnt').textContent = `${appDone} / 5 已測試`;
+  document.getElementById('suspendCnt').textContent = `${suspendDone} / ${suspendTotal} 已測試`;
+  document.getElementById('appCnt').textContent = `${appDone} / ${appTotal} 已測試`;
 }
 
 /* ---------------- Toast ---------------- */
@@ -830,7 +857,7 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
   state.basic = {};
   state.suspend = {};
   state.app = {};
-  customItems = [];
+  customItems = { basic:[], suspend:[], app:[] };
   refreshAllToggleUI();
   showToast('已清空');
   // Browsers only allow a page to close itself if the page was opened by
@@ -867,7 +894,7 @@ function refreshAllToggleUI(){
       if(b) b.classList.add('active');
     }
   });
-  renderCustomItems();
+  ['basic','suspend','app'].forEach(renderCustomItems);
   renderRecipients();
   updateCounters();
 }
@@ -883,7 +910,20 @@ function applyDraft(obj){
   state.basic = obj.basic || {};
   state.suspend = obj.suspend || {};
   state.app = obj.app || {};
-  customItems = Array.isArray(obj.customItems) ? obj.customItems : [];
+  // Drafts saved before Suspend/App custom items existed stored a flat
+  // array that was always the Basic Function list — keep those loadable.
+  const rawCustom = obj.customItems;
+  if(Array.isArray(rawCustom)){
+    customItems = { basic: rawCustom, suspend: [], app: [] };
+  } else if(rawCustom && typeof rawCustom === 'object'){
+    customItems = {
+      basic: Array.isArray(rawCustom.basic) ? rawCustom.basic : [],
+      suspend: Array.isArray(rawCustom.suspend) ? rawCustom.suspend : [],
+      app: Array.isArray(rawCustom.app) ? rawCustom.app : [],
+    };
+  } else {
+    customItems = { basic:[], suspend:[], app:[] };
+  }
   if(Array.isArray(obj.recipientEmails) && obj.recipientEmails.length){
     recipientEmails = obj.recipientEmails;
   }
@@ -1276,7 +1316,7 @@ async function generateBlob(){
     const row = R0(base);
     return { numAddr:`F${row}`, nameAddr:`G${row}`, passAddr:`I${row}`, failAddr:`J${row}`, prefilled: idx<3 };
   });
-  const items = (customItems||[]).filter(it=>it.name && it.name.trim()!=='');
+  const items = customItems.basic.filter(it=>it.name && it.name.trim()!=='');
   const reservedUsed = Math.min(items.length, RESERVED_SLOTS.length);
   for(let i=0;i<reservedUsed;i++){
     const slot = RESERVED_SLOTS[i];
@@ -1323,22 +1363,79 @@ async function generateBlob(){
   pf(`I${R(52)}`, `J${R(52)}`, state.suspend['S3']);
   pf(`I${R(53)}`, `J${R(53)}`, state.suspend['S4']);
 
-  pf(`D${R(56)}`, `E${R(56)}`, state.app[1]);
-  pf(`I${R(56)}`, `J${R(56)}`, state.app[2]);
-  pf(`I${R(58)}`, `J${R(58)}`, state.app[3]);
-  pf(`I${R(59)}`, `J${R(59)}`, state.app[4]);
-  pf(`I${R(60)}`, `J${R(60)}`, state.app[5]);
+  // Suspend Test custom items: unlike Basic Function, the template has no
+  // spare reserved rows here, so any custom item needs a real inserted row.
+  // Every S1/S3/S4 row already has the exact shape we need (A:H merged
+  // label, I/J pass/fail), so a new row just clones one of those wholesale
+  // instead of hand-building a border set. Inserted right after S4, before
+  // the "Application Software Test" header.
+  const suspendItems = customItems.suspend.filter(it=>it.name && it.name.trim()!=='');
+  const suspendN = suspendItems.length;
+  if(suspendN > 0){
+    const cols = ['A','B','C','D','E','F','G','H','I','J'];
+    const styleSrcs = cols.map(c=> ws.getCell(`${c}${R(51)}`).style);
+    const insertAt = R(54);
+    insertRowsAt(insertAt, suspendN);
+    suspendItems.forEach((it, idx)=>{
+      const row = insertAt+idx;
+      cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(styleSrcs[ci])); });
+      ws.mergeCells(`A${row}:H${row}`);
+      set(`A${row}`, it.name.trim(), LEFT_MIDDLE_ALIGN);
+      pf(`I${row}`, `J${row}`, it.status);
+    });
+  }
+
+  // Everything from "Application Software Test" down shifts by however
+  // many Suspend Test custom rows were just inserted above it.
+  const R2 = (base)=> R(base) + suspendN;
+  pf(`D${R2(56)}`, `E${R2(56)}`, state.app[1]);
+  pf(`I${R2(56)}`, `J${R2(56)}`, state.app[2]);
+  pf(`I${R2(58)}`, `J${R2(58)}`, state.app[3]);
+  pf(`I${R2(59)}`, `J${R2(59)}`, state.app[4]);
+  pf(`I${R2(60)}`, `J${R2(60)}`, state.app[5]);
 
   if(f.markVer || f.markScore){
-    const cell = ws.getCell(`F${R(56)}`);
+    const cell = ws.getCell(`F${R2(56)}`);
     cell.value = `3DMark (Ver: ${f.markVer || '        '} /Score: ${f.markScore || '        '})\nP.S The memory size needs to be more than 8GB`;
     cell.font = UNIFORM_FONT;
     cell.alignment = Object.assign({}, cell.alignment, {wrapText:true});
   }
 
-  appendToLabel(`A${R(61)}`, f.approvedBy, SIGNOFF_FONT);
-  appendToLabel(`E${R(61)}`, f.checkedBy, SIGNOFF_FONT);
-  appendToLabel(`H${R(61)}`, f.testedBy, SIGNOFF_FONT);
+  // Application Software Test custom items: same idea, appended after the
+  // existing 5 items (row 60 in template terms), before sign-off. Row 60
+  // currently carries the table's closing (medium) bottom border — that
+  // has to move down onto whichever row ends up last.
+  const appItems = customItems.app.filter(it=>it.name && it.name.trim()!=='');
+  const appN = appItems.length;
+  if(appN > 0){
+    const cols = ['A','B','C','D','E','F','G','H','I','J'];
+    // Deep-cloned immediately: .style returns a live reference into the
+    // cell's own internal style object, not a snapshot, and row 60's
+    // border is mutated a few lines below — without cloning now, that
+    // later mutation would retroactively change what was "captured" here.
+    const normalStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(59)}`).style))); // normal (thin-bottom) row
+    const lastStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(60)}`).style)));   // current last (medium-bottom) row
+    const insertAt = R2(61);
+    insertRowsAt(insertAt, appN);
+    cols.forEach(c=>{
+      const cell = ws.getCell(`${c}${R2(60)}`);
+      cell.border = Object.assign({}, cell.border, { bottom: THIN });
+    });
+    appItems.forEach((it, idx)=>{
+      const row = insertAt+idx;
+      const isLast = idx === appItems.length-1;
+      const srcs = isLast ? lastStyleSrcs : normalStyleSrcs;
+      cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(srcs[ci])); });
+      ws.mergeCells(`A${row}:H${row}`);
+      set(`A${row}`, it.name.trim(), LEFT_MIDDLE_ALIGN);
+      pf(`I${row}`, `J${row}`, it.status);
+    });
+  }
+
+  const R3 = (base)=> R2(base) + appN;
+  appendToLabel(`A${R3(61)}`, f.approvedBy, SIGNOFF_FONT);
+  appendToLabel(`E${R3(61)}`, f.checkedBy, SIGNOFF_FONT);
+  appendToLabel(`H${R3(61)}`, f.testedBy, SIGNOFF_FONT);
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -1355,7 +1452,9 @@ function statusBadge(status){
 
 function buildPreviewHtml(){
   const f = collect();
-  const namedCustom = customItems.filter(i=>i.name && i.name.trim()!=='');
+  const namedCustom = customItems.basic.filter(i=>i.name && i.name.trim()!=='');
+  const namedSuspendCustom = customItems.suspend.filter(i=>i.name && i.name.trim()!=='');
+  const namedAppCustom = customItems.app.filter(i=>i.name && i.name.trim()!=='');
   const infoRow = (k,v)=>`<div class="pv-row"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(v||'—')}</div></div>`;
   const itemRow = (label,status)=>`<div class="pv-item"><div class="n">${escapeHtml(label)}</div>${statusBadge(status)}</div>`;
 
@@ -1393,11 +1492,13 @@ function buildPreviewHtml(){
 
   html += `<div class="pv-section"><div class="pv-section-title">Suspend Test</div>`;
   suspendList.forEach(s=>{ html += itemRow(s, state.suspend[s]); });
+  namedSuspendCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
   html += `</div>`;
 
   html += `<div class="pv-section"><div class="pv-section-title">Application Software Test</div>`;
   appList.forEach((name,idx)=>{ html += itemRow(name, state.app[idx+1]); });
   if(f.markVer || f.markScore){ html += infoRow('3DMark', `Ver ${f.markVer||'—'} / Score ${f.markScore||'—'}`); }
+  namedAppCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
   html += `</div>`;
 
   html += `<div class="pv-section"><div class="pv-section-title">簽核</div>`
