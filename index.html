@@ -276,7 +276,6 @@ details[open] > summary .chev{transform:rotate(90deg);}
 }
 .pv-section{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:14px; overflow:hidden;}
 .pv-section-title{font-weight:700; font-size:13.5px; padding:10px 14px; border-bottom:1px solid var(--line); background:#F7F8FA;}
-.pv-subhead{padding:6px 14px 4px; font-size:11.5px; color:var(--sub); font-weight:700; letter-spacing:0.01em; border-bottom:1px solid var(--line); background:#FAFAFB;}
 .pv-row{display:flex; justify-content:space-between; gap:10px; padding:7px 14px; font-size:13.5px; border-bottom:1px solid var(--line);}
 .pv-row:last-child{border-bottom:none;}
 .pv-row .k{color:var(--sub); flex:0 0 auto;}
@@ -436,7 +435,7 @@ details[open] > summary .chev{transform:rotate(90deg);}
       <summary class="collapse-header">
         <div>
           <div style="font-weight:600; font-size:15px;">Application Software Test</div>
-          <div class="cnt" id="appCnt">0 / 5 已測試</div>
+          <div class="cnt" id="appCnt">0 / 2 已測試</div>
         </div>
         <span class="chev">▸</span>
       </summary>
@@ -445,6 +444,22 @@ details[open] > summary .chev{transform:rotate(90deg);}
         <div class="row"><label class="field-label">3DMark Score</label><input type="text" id="markScore" placeholder="分數"></div>
         <div id="appItems"></div>
       </div>
+    </details>
+  </div>
+
+  <!-- Operating System Installation (its own independent section, matching
+       the template's own grouping — see the "Application Software Test"
+       block above for Reboot / 3DMark / custom items). -->
+  <div class="group">
+    <details class="card" id="grp-osinstall">
+      <summary class="collapse-header">
+        <div>
+          <div style="font-weight:600; font-size:15px;">Operating System Installation</div>
+          <div class="cnt" id="osInstallCnt">0 / 3 已測試</div>
+        </div>
+        <span class="chev">▸</span>
+      </summary>
+      <div class="group-body" id="osInstallItems"></div>
     </details>
   </div>
 
@@ -587,10 +602,13 @@ function escapeHtml(s){
 function toggleBtn(groupKey, id, kind, label){
   return `<button type="button" class="toggle-btn ${kind}" data-group="${groupKey}" data-id="${id}" data-kind="${kind}">${label}</button>`;
 }
-function renderItemRow(groupKey, id, name, note){
+function renderItemRow(groupKey, id, name, note, displayNum){
+  // displayNum lets the badge show a different number than the internal id
+  // (e.g. Operating System Installation shows local 1/2/3 while state is
+  // still keyed by the app section's real ids 3/4/5) — defaults to id.
   return `<div class="item-row" data-row="${groupKey}-${id}">
     <div class="item-top">
-      <div class="item-num">${id}</div>
+      <div class="item-num">${displayNum==null?id:displayNum}</div>
       <div class="item-name">${name}${note? `<div class="item-note">${note}</div>`:''}</div>
       <div class="toggle-group">
         ${toggleBtn(groupKey,id,'pass','Pass')}
@@ -617,13 +635,20 @@ document.getElementById('suspendItems').innerHTML =
   `<div id="customItemsWrap-suspend"></div>` +
   `<div class="add-item-row"><button type="button" class="add-item-btn" data-addgroup="suspend">＋ 新增項目</button></div>`;
 
+// Application Software Test's own items are just Reboot / 3DMark — the
+// "Operating System Installation" items (3/4/5) render into their own
+// independent card below, so custom App items added here land right after
+// 3DMark, matching where they're actually inserted in the Excel output.
 document.getElementById('appItems').innerHTML =
   appList.slice(0,2).map((name,idx)=>renderItemRow('app', idx+1, name)).join('') +
-  `<div class="sub-head">Operating System Installation</div>` +
-  appList.slice(2).map((name,idx)=>renderItemRow('app', idx+3, name)).join('') +
   `<div class="sub-head">自訂項目</div>` +
   `<div id="customItemsWrap-app"></div>` +
   `<div class="add-item-row"><button type="button" class="add-item-btn" data-addgroup="app">＋ 新增項目</button></div>`;
+
+// state.app stays keyed 3/4/5 for these (generateBlob() and saved drafts
+// both rely on that), only the on-screen badge shows local 1/2/3.
+document.getElementById('osInstallItems').innerHTML =
+  appList.slice(2).map((name,idx)=>renderItemRow('app', idx+3, name, null, idx+1)).join('');
 
 /* ---------------- Render: custom items ---------------- */
 // Basic Function items are numbered (51, 52, ...), matching the template's
@@ -760,12 +785,19 @@ function updateCounters(){
   const basicTotal = 50 + namedBasic.length;
   const suspendDone = Object.values(state.suspend).filter(Boolean).length + namedSuspend.filter(i=>i.status).length;
   const suspendTotal = 3 + namedSuspend.length;
-  const appDone = Object.values(state.app).filter(Boolean).length + namedApp.filter(i=>i.status).length;
-  const appTotal = 5 + namedApp.length;
+  // Application Software Test now only covers its own two fixed items
+  // (Reboot / 3DMark) plus any custom items; the three Operating System
+  // Installation items (state.app[3..5]) are counted separately below since
+  // that's now its own independent section.
+  const appDone = [1,2].filter(id=>state.app[id]).length + namedApp.filter(i=>i.status).length;
+  const appTotal = 2 + namedApp.length;
+  const osInstallDone = [3,4,5].filter(id=>state.app[id]).length;
+  const osInstallTotal = 3;
   document.getElementById('basicCnt').textContent = `${basicDone} / ${basicTotal} 已測試`;
   document.getElementById('basicProgress').style.width = (basicTotal ? basicDone/basicTotal*100 : 0)+'%';
   document.getElementById('suspendCnt').textContent = `${suspendDone} / ${suspendTotal} 已測試`;
   document.getElementById('appCnt').textContent = `${appDone} / ${appTotal} 已測試`;
+  document.getElementById('osInstallCnt').textContent = `${osInstallDone} / ${osInstallTotal} 已測試`;
 }
 
 /* ---------------- Toast ---------------- */
@@ -888,7 +920,7 @@ function serializeDraft(){
 }
 
 function refreshAllToggleUI(){
-  document.querySelectorAll('#basicItems > .item-row[data-row], #suspendItems .item-row[data-row], #appItems .item-row[data-row]').forEach(row=>{
+  document.querySelectorAll('#basicItems > .item-row[data-row], #suspendItems .item-row[data-row], #appItems .item-row[data-row], #osInstallItems .item-row[data-row]').forEach(row=>{
     const [group,id] = row.dataset.row.split('-');
     const status = state[group] ? state[group][id] : undefined;
     row.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
@@ -1502,18 +1534,21 @@ function buildPreviewHtml(){
   }
 
   html += `<div class="pv-section"><div class="pv-section-title">Application Software Test</div>`;
-  // Reboot / 3DMark first, then any custom items, then a sub-header marking
-  // where the template's own "Operating System Installation" group begins —
-  // matching where the Excel output actually places new items (right after
-  // Reboot/3DMark, before that group), so they don't read as belonging to it.
+  // Reboot / 3DMark plus any custom items — Operating System Installation is
+  // its own independent section below (matching the app's own UI), and
+  // custom App items land here, right after 3DMark, matching where the
+  // Excel output actually places new items (before that group), so they
+  // don't read as belonging to it.
   html += itemRow(appList[0], state.app[1]);
   html += itemRow(appList[1], state.app[2]);
   if(f.markVer || f.markScore){ html += infoRow('3DMark', `Ver ${f.markVer||'—'} / Score ${f.markScore||'—'}`); }
   namedAppCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
-  html += `<div class="pv-subhead">Operating System Installation</div>`;
-  html += itemRow(appList[2], state.app[3]);
-  html += itemRow(appList[3], state.app[4]);
-  html += itemRow(appList[4], state.app[5]);
+  html += `</div>`;
+
+  html += `<div class="pv-section"><div class="pv-section-title">Operating System Installation</div>`;
+  html += itemRow(`1. ${appList[2]}`, state.app[3]);
+  html += itemRow(`2. ${appList[3]}`, state.app[4]);
+  html += itemRow(`3. ${appList[4]}`, state.app[5]);
   html += `</div>`;
 
   html += `<div class="pv-section"><div class="pv-section-title">簽核</div>`
