@@ -1390,9 +1390,6 @@ async function generateBlob(){
   const R2 = (base)=> R(base) + suspendN;
   pf(`D${R2(56)}`, `E${R2(56)}`, state.app[1]);
   pf(`I${R2(56)}`, `J${R2(56)}`, state.app[2]);
-  pf(`I${R2(58)}`, `J${R2(58)}`, state.app[3]);
-  pf(`I${R2(59)}`, `J${R2(59)}`, state.app[4]);
-  pf(`I${R2(60)}`, `J${R2(60)}`, state.app[5]);
 
   if(f.markVer || f.markScore){
     const cell = ws.getCell(`F${R2(56)}`);
@@ -1401,54 +1398,40 @@ async function generateBlob(){
     cell.alignment = Object.assign({}, cell.alignment, {wrapText:true});
   }
 
-  // Application Software Test custom items: same idea, appended after the
-  // existing 5 items (row 60 in template terms), before sign-off. Row 60
-  // currently carries the table's closing (medium) bottom border — that
-  // has to move down onto whichever row ends up last.
-  //
-  // Unlike Suspend Test, this table has "Operating System Installation"
-  // (template row 57) as a full-width divider sitting right above the last
-  // fixed item — with no divider of their own, custom items appended
-  // straight after "System properties..." read as if they were just more
-  // OS-installation sub-items. A "Custom Items" divider (cloned from that
-  // same row's bold/centered style) is inserted first so the new items are
-  // visibly their own group instead.
+  // Application Software Test custom items: inserted right after Reboot /
+  // 3DMark (template row 56) and before the "Operating System Installation"
+  // divider (template row 57) — not at the end of the whole section. Custom
+  // items appended after the OS-install group's own items (Windows setup /
+  // driver install / system properties) would sit directly under that
+  // divider with nothing to show they aren't part of it; landing here,
+  // right after the two items that aren't part of any subgroup either,
+  // avoids that mislabeling with no extra divider needed — the same reason
+  // Suspend Test's custom items don't need one.
   const appItems = customItems.app.filter(it=>it.name && it.name.trim()!=='');
   const appN = appItems.length;
   if(appN > 0){
     const cols = ['A','B','C','D','E','F','G','H','I','J'];
-    // Deep-cloned immediately: .style returns a live reference into the
-    // cell's own internal style object, not a snapshot, and row 60's
-    // border is mutated a few lines below — without cloning now, that
-    // later mutation would retroactively change what was "captured" here.
-    const dividerStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(57)}`).style))); // "Operating System Installation" style
-    const normalStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(59)}`).style)));  // normal (thin-bottom) row
-    const lastStyleSrcs = cols.map(c=> JSON.parse(JSON.stringify(ws.getCell(`${c}${R2(60)}`).style)));    // current last (medium-bottom) row
-    const insertAt = R2(61);
-    const appBlockRows = appN + 1; // +1 for the divider row
-    insertRowsAt(insertAt, appBlockRows);
-    cols.forEach(c=>{
-      const cell = ws.getCell(`${c}${R2(60)}`);
-      cell.border = Object.assign({}, cell.border, { bottom: THIN });
-    });
-    const dividerRow = insertAt;
-    cols.forEach((c,ci)=>{ ws.getCell(`${c}${dividerRow}`).style = JSON.parse(JSON.stringify(dividerStyleSrcs[ci])); });
-    ws.mergeCells(`A${dividerRow}:J${dividerRow}`);
-    // Not set() here on purpose: set() forces the 9pt uniform data font,
-    // which would stomp the bold/centered title font just cloned above.
-    ws.getCell(`A${dividerRow}`).value = 'Custom Items';
+    const styleSrcs = cols.map(c=> ws.getCell(`${c}${R2(58)}`).style); // a normal row's look (e.g. "Windows setup...")
+    const insertAt = R2(57);
+    insertRowsAt(insertAt, appN);
     appItems.forEach((it, idx)=>{
-      const row = insertAt+1+idx;
-      const isLast = idx === appItems.length-1;
-      const srcs = isLast ? lastStyleSrcs : normalStyleSrcs;
-      cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(srcs[ci])); });
+      const row = insertAt+idx;
+      cols.forEach((c,ci)=>{ ws.getCell(`${c}${row}`).style = JSON.parse(JSON.stringify(styleSrcs[ci])); });
       ws.mergeCells(`A${row}:H${row}`);
       set(`A${row}`, it.name.trim(), LEFT_MIDDLE_ALIGN);
       pf(`I${row}`, `J${row}`, it.status);
     });
   }
 
-  const R3 = (base)=> R2(base) + (appN > 0 ? appN+1 : 0);
+  // "Operating System Installation" and everything below it (its own 3
+  // items, then sign-off) shift down by however many app custom rows were
+  // just inserted above them. Nothing else gets inserted between here and
+  // sign-off, so one offset covers both.
+  const R3 = (base)=> R2(base) + appN;
+  pf(`I${R3(58)}`, `J${R3(58)}`, state.app[3]);
+  pf(`I${R3(59)}`, `J${R3(59)}`, state.app[4]);
+  pf(`I${R3(60)}`, `J${R3(60)}`, state.app[5]);
+
   appendToLabel(`A${R3(61)}`, f.approvedBy, SIGNOFF_FONT);
   appendToLabel(`E${R3(61)}`, f.checkedBy, SIGNOFF_FONT);
   appendToLabel(`H${R3(61)}`, f.testedBy, SIGNOFF_FONT);
@@ -1516,18 +1499,18 @@ function buildPreviewHtml(){
   }
 
   html += `<div class="pv-section"><div class="pv-section-title">Application Software Test</div>`;
-  appList.forEach((name,idx)=>{ html += itemRow(name, state.app[idx+1]); });
+  // Reboot / 3DMark first, then any custom items, then the "Operating
+  // System Installation" group — matching where the Excel output actually
+  // places new items (right after Reboot/3DMark, before that group), so
+  // they don't read as belonging to it.
+  html += itemRow(appList[0], state.app[1]);
+  html += itemRow(appList[1], state.app[2]);
   if(f.markVer || f.markScore){ html += infoRow('3DMark', `Ver ${f.markVer||'—'} / Score ${f.markScore||'—'}`); }
+  namedAppCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
+  html += itemRow(appList[2], state.app[3]);
+  html += itemRow(appList[3], state.app[4]);
+  html += itemRow(appList[4], state.app[5]);
   html += `</div>`;
-  if(namedAppCustom.length){
-    // Kept as its own block (not appended under the fixed items above) to
-    // match the actual Excel output, which now inserts a "Custom Items"
-    // divider before these — without it, they read as if they were part
-    // of the "Operating System Installation" group right above them.
-    html += `<div class="pv-section"><div class="pv-section-title">Application Software Test - 自訂項目</div>`;
-    namedAppCustom.forEach(it=>{ html += itemRow(it.name, it.status); });
-    html += `</div>`;
-  }
 
   html += `<div class="pv-section"><div class="pv-section-title">簽核</div>`
     + infoRow('Approved by', f.approvedBy) + infoRow('Checked by', f.checkedBy) + infoRow('Tested by', f.testedBy)
