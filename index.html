@@ -691,6 +691,31 @@ function renderRecipients(){
 }
 renderRecipients();
 
+/* ---------------- Auto-save (survive tab reloads) ----------------
+   Mobile browsers routinely discard a backgrounded tab's entire JS memory
+   after the screen has been off a while (or under memory pressure) and
+   silently reload the page from scratch when the user comes back — it
+   still looks like the same tab, but every in-memory variable (state,
+   customItems, all field values) is gone. Until now the only way to
+   survive that was tapping the 💾 button first, which is easy to forget.
+   To fix that, every change below auto-saves a snapshot to localStorage
+   (which — unlike page memory — does survive a tab being discarded), and
+   on load we check for one and silently restore it. See restoreAutoSave()
+   near the bottom of this script. */
+const AUTOSAVE_KEY = 'biosEcnAutosaveDraft_v1';
+let autoSaveTimer = null;
+function autoSaveDraft(){
+  try{ localStorage.setItem(AUTOSAVE_KEY, serializeDraft()); }
+  catch(err){ console.warn('autosave failed', err); } // best-effort only
+}
+function scheduleAutoSave(){
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(autoSaveDraft, 500);
+}
+function clearAutoSave(){
+  try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(err){ /* ignore */ }
+}
+
 /* ---------------- Click / input delegation ---------------- */
 document.body.addEventListener('click', (e)=>{
   const btn = e.target.closest('.toggle-btn');
@@ -707,6 +732,7 @@ document.body.addEventListener('click', (e)=>{
         if(item.status) row.querySelector(`.toggle-btn[data-kind="${item.status}"]`).classList.add('active');
       }
       updateCounters();
+      autoSaveDraft();
       return;
     }
     const store = state[group];
@@ -716,6 +742,7 @@ document.body.addEventListener('click', (e)=>{
     row.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
     if(store[id]) row.querySelector(`.toggle-btn[data-kind="${store[id]}"]`).classList.add('active');
     updateCounters();
+    autoSaveDraft();
     return;
   }
 
@@ -724,6 +751,7 @@ document.body.addEventListener('click', (e)=>{
     const idx = parseInt(removeRecipientBtn.dataset.idx,10);
     recipientEmails.splice(idx,1);
     renderRecipients();
+    autoSaveDraft();
     return;
   }
 
@@ -734,6 +762,7 @@ document.body.addEventListener('click', (e)=>{
     if(customItems[g]){
       customItems[g].splice(idx,1);
       renderCustomItems(g);
+      autoSaveDraft();
     }
     return;
   }
@@ -744,6 +773,7 @@ document.body.addEventListener('click', (e)=>{
     if(customItems[g]){
       customItems[g].push({name:'', status:null});
       renderCustomItems(g);
+      autoSaveDraft();
       const inputs = document.querySelectorAll(`.custom-item-input[data-group="${g}"]`);
       if(inputs.length) inputs[inputs.length-1].focus();
     }
@@ -757,6 +787,7 @@ document.body.addEventListener('click', (e)=>{
       recipientEmails.push(val);
       input.value = '';
       renderRecipients();
+      autoSaveDraft();
     }
     return;
   }
@@ -768,6 +799,14 @@ document.body.addEventListener('input', (e)=>{
     const idx = parseInt(e.target.dataset.idx,10);
     if(customItems[g] && customItems[g][idx]) customItems[g][idx].name = e.target.value;
   }
+  scheduleAutoSave();
+});
+
+// 'input' doesn't fire reliably for <select> on every browser — 'change' is
+// the correct event for those (testedBy) and doubles as a safety net for
+// anything the 'input' listener above might miss.
+document.body.addEventListener('change', (e)=>{
+  if(e.target.matches('input, textarea, select')) scheduleAutoSave();
 });
 
 document.body.addEventListener('keydown', (e)=>{
@@ -894,6 +933,7 @@ document.getElementById('btnReset').addEventListener('click', ()=>{
   state.app = {};
   customItems = { basic:[], suspend:[], app:[] };
   refreshAllToggleUI();
+  clearAutoSave();
   showToast('已清空');
   // Browsers only allow a page to close itself if the page was opened by
   // script (e.g. window.open from another page). A normal tab, a typed
@@ -992,6 +1032,7 @@ document.getElementById('openDraftInput').addEventListener('change', (e)=>{
     try{
       const obj = JSON.parse(reader.result);
       applyDraft(obj);
+      autoSaveDraft();
       showToast('已讀回存檔：'+file.name);
     }catch(err){
       console.error(err);
@@ -1620,6 +1661,23 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
     showToast('寄出失敗：'+(err && err.message ? err.message : '未知錯誤'), 4000);
   }
 });
+
+/* ---------------- Auto-restore on load ----------------
+   If a previous session left an auto-saved snapshot (see autoSaveDraft()
+   above) — most commonly because the tab got discarded while the phone
+   screen was off rather than because the user tapped 🗑️ — silently bring
+   it back instead of showing a blank form. */
+(function restoreAutoSave(){
+  let raw = null;
+  try{ raw = localStorage.getItem(AUTOSAVE_KEY); }catch(err){ /* ignore */ }
+  if(!raw) return;
+  try{
+    applyDraft(JSON.parse(raw));
+    showToast('已自動還原上次未存檔的填寫內容', 3500);
+  }catch(err){
+    console.warn('autosave restore failed', err);
+  }
+})();
 
 updateCounters();
 
